@@ -19,7 +19,7 @@ function safeVo2max(stepObj) {
 
 export function useBuildSessionPayload() {
   const { profile, session, surveys } = useApp(); // ✅ AppContext에서 직접 가져오기
-
+  const userId = profile?.userId || null;
   const name = profile?.name ?? "";
   const sex = profile?.sex ?? "M";
   const age = Number(profile?.age ?? 0);
@@ -35,6 +35,7 @@ export function useBuildSessionPayload() {
 
   return {
     user: {
+      userId,
       name,
       sex,
       age,

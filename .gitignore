@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 server/.env
+# DB 파일은 개발용이므로 Git에 안 올리기
+data/
+*.db

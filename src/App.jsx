@@ -32,7 +32,6 @@ export default function App() {
         }}>
           {/* 메인 네비게이션 */}
           <NavBtn to="/">시작</NavBtn>
-          <NavBtn to="/profile">개인정보</NavBtn>
           <NavBtn to="/select">종목선택</NavBtn>
           <NavBtn to="/measure/situp">윗몸</NavBtn>
           <NavBtn to="/measure/reach">좌전굴</NavBtn>

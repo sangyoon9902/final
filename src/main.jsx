@@ -7,7 +7,6 @@ import { AppProvider } from "./state/AppState";
 import App from "./App";
 import Start from "./pages/Start.jsx";
 import Select from "./pages/Select.jsx";
-import Profile from "./pages/Profile.jsx";
 import Results from "./pages/Results.jsx";
 
 import MeasureSitup from "./pages/MeasureSitUp.jsx";        // 파일명 대소문자 확인
@@ -28,7 +27,6 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Start /> },
       { path: "select", element: <Select /> },
-      { path: "profile", element: <Profile /> },
       { path: "results", element: <Results /> },
 
       // 측정 페이지들

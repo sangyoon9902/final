@@ -17,6 +17,36 @@ function normalizeMeasurements(measurements = {}) {
 }
 
 /**
+ * 서버 응답에서 plan/evidence/traceId를 유연하게 추출
+ */
+function extractResponse(data) {
+  // plan 텍스트 후보들
+  const planMd =
+    data?.planMd ??
+    data?.plan_markdown ??
+    data?.plan ??
+    data?.planText?.planText ??
+    data?.planText?.content ??
+    "";
+
+  // evidence 후보들
+  const evidence =
+    (Array.isArray(data?.evidence) && data.evidence) ||
+    (Array.isArray(data?.meta?.evidence) && data.meta.evidence) ||
+    [];
+
+  // traceId 후보들
+  const traceId =
+    data?.trace_id ??
+    data?.traceId ??
+    data?.meta?.trace_id ??
+    data?.meta?.traceId ??
+    "";
+
+  return { planMd, evidence, traceId };
+}
+
+/**
  * 정규화된 페이로드(user/measurements/surveys) 전송
  * @returns {Promise<{ planMd: string, evidence: Array, traceId: string, raw: any }>}
  */
@@ -43,16 +73,11 @@ export async function sendSessionSummary({ user, measurements, surveys, signal }
   }
 
   if (!resp.ok) {
-    // Results.jsx에서 메시지 보여줄 수 있도록 에러 throw
     const detail = typeof data === "object" ? JSON.stringify(data) : String(data);
     throw new Error(`HTTP ${resp.status} ${detail}`);
   }
 
-  // ✅ 서버 구조에 맞춰 추출
-  const planMd   = data?.planText?.planText ?? "";
-  const evidence = Array.isArray(data?.evidence) ? data.evidence : [];
-  const traceId  = data?.trace_id ?? "";
+  const { planMd, evidence, traceId } = extractResponse(data);
 
-  // 기존과의 호환을 위해 raw도 그대로 반환
   return { planMd, evidence, traceId, raw: data };
 }

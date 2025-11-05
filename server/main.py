@@ -1,81 +1,56 @@
 # server/main.py
-from fastapi import FastAPI, Request, HTTPException
+from __future__ import annotations
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Any, Dict
 from uuid import uuid4
 import json
+import traceback
 
-# ✅ 변경된 부분: KSPO 전용 엔진 불러오기
+# ───────────── 내부 모듈 ─────────────
+from .db import Base, engine, get_db
+from .models import DBUser, DBResult
+from .routers import users  # ✅ /users 라우터 연결
+from sqlalchemy.orm import Session
+
+# ✅ RAG 엔진 (KSPO 전용)
 from .rag.query_engine_kspo_only import (
     generate_prescription_kspo_only,
+    _get_openai_client,
 )
-from .rag.query_engine_kspo_only import _get_openai_client  # optional health check
 
-app = FastAPI(title="AI Fitness API", version="0.2.0")
+# ───────────── FastAPI 초기화 ─────────────
+app = FastAPI(title="AI Fitness API", version="0.3.1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # 개발 중에는 * 허용 / 운영 시 특정 도메인으로 제한
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# DB 테이블 자동 생성
+Base.metadata.create_all(bind=engine)
+
+
+# ───────────── 이벤트 핸들러 ─────────────
 @app.on_event("startup")
 def _startup_rag():
+    """OpenAI 클라이언트 로드 테스트"""
     try:
-        # 간단한 초기화 테스트
         _ = _get_openai_client()
         print("✅ OpenAI 클라이언트 로드 완료 (KSPO 전용)")
     except Exception as e:
         print("⚠️ OpenAI 초기화 실패:", e)
 
+
+# ───────────── Health / Root ─────────────
 @app.get("/health")
 def health():
     return {"ok": True, "service": "ai-fitness", "version": app.version}
 
-@app.get("/session_summary")
-def session_summary_get():
-    return {
-        "detail": "Use POST with JSON body to /session_summary",
-        "example": {
-            "user": {"name": "문채희", "sex": "F", "age": 25, "height_cm": 160, "weight_kg": 55, "bmi": 21.5},
-            "measurements": {"situp_reps": 20, "reach_cm": 5.0, "step_vo2max": None},
-            "surveys": {},
-        },
-    }
-
-@app.post("/session_summary")
-async def session_summary(req: Request):
-    trace_id = str(uuid4())
-    try:
-        body: Dict[str, Any] = await req.json()
-    except Exception as e:
-        print(f"❌ [session_summary] JSON parse error ({trace_id}): {e}")
-        return JSONResponse(
-            status_code=400,
-            content={"trace_id": trace_id, "error": "invalid_json", "detail": str(e)},
-        )
-
-    print(f"🌐 [session_summary] 요청 수신: {trace_id}")
-    try:
-        print(json.dumps(body, ensure_ascii=False, indent=2))
-    except Exception:
-        print(str(body))
-
-    try:
-        # ✅ 변경 포인트: KSPO 전용 추천 함수 사용
-        plan = generate_prescription_kspo_only(body, per_cat=3)
-    except Exception as e:
-        print(f"⚠️ RAG 생성 오류({trace_id}): {e}")
-        raise HTTPException(status_code=500, detail=f"RAG error: {e}")
-
-    return {
-        "trace_id": trace_id,
-        "received": body,
-        **plan,  # planText + recommendations + case_refs 포함
-    }
 
 @app.get("/")
 def root():
@@ -85,3 +60,113 @@ def root():
         "post_endpoint": "/session_summary",
         "version": app.version,
     }
+
+
+# ───────────── 세션 요약 GET (예시) ─────────────
+@app.get("/session_summary")
+def session_summary_get():
+    return {
+        "detail": "Use POST with JSON body to /session_summary",
+        "example": {
+            "user": {
+                "name": "문채희",
+                "sex": "F",
+                "age": 25,
+                "height_cm": 160,
+                "weight_kg": 55,
+                "bmi": 21.5,
+            },
+            "measurements": {
+                "situp_reps": 20,
+                "reach_cm": 5.0,
+                "step_vo2max": None,
+            },
+            "surveys": {},
+        },
+    }
+
+
+# ───────────── POST /session_summary ─────────────
+@app.post("/session_summary")
+async def session_summary(req: Request, db: Session = Depends(get_db)):
+    trace_id = str(uuid4())
+
+    # ✅ Step 1. JSON 파싱
+    try:
+        body: Dict[str, Any] = await req.json()
+    except Exception as e:
+        print(f"❌ [session_summary] JSON parse error ({trace_id}): {e}")
+        return JSONResponse(
+            status_code=400,
+            content={"trace_id": trace_id, "error": "invalid_json", "detail": str(e)},
+        )
+
+    print(f"\n🌐 [session_summary] 요청 수신: {trace_id}")
+    try:
+        print(json.dumps(body, ensure_ascii=False, indent=2))
+    except Exception:
+        print(str(body))
+
+    # ✅ Step 2. KSPO 전용 처방 생성
+    try:
+        plan = generate_prescription_kspo_only(body, per_cat=3)
+    except Exception as e:
+        print(f"⚠️ RAG 생성 오류({trace_id}): {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"RAG error: {e}")
+
+    # ✅ Step 3. 응답 정규화
+    plan_md = (
+        plan.get("planText", {}).get("planText")
+        or plan.get("planText")
+        or plan.get("plan_md")
+        or ""
+    )
+    evidence = plan.get("evidence") or []
+    received = body or {}
+
+    # ✅ Step 4. DB 저장 (결과 테이블)
+    try:
+        user_obj = received.get("user", {})
+        user_id = user_obj.get("userId")
+
+        # userId가 없으면 임시 유저 자동 생성
+        if not user_id:
+            tmp_user = DBUser(id=str(uuid4()), name=user_obj.get("name", "미등록"))
+            db.add(tmp_user)
+            db.commit()
+            db.refresh(tmp_user)
+            user_id = tmp_user.id
+            print(f"⚠️ userId 누락 → 임시 유저 생성: {user_id}")
+
+        result = DBResult(
+            id=str(uuid4()),
+            user_id=user_id,
+            trace_id=trace_id,
+            status="final",
+            user_json=received.get("user"),
+            surveys_json=received.get("surveys"),
+            measurements_json=received.get("measurements"),
+            plan_md=plan_md,
+            evidence_json=evidence,
+            payload_json={"source": "KSPO_only", "raw_plan": plan},
+        )
+        db.add(result)
+        db.commit()
+        print(f"💾 [DB 저장 완료] result_id={result.id}, user_id={user_id}")
+
+    except Exception as e:
+        print(f"⚠️ DB 저장 실패({trace_id}): {e}")
+        traceback.print_exc()
+
+    # ✅ Step 5. 응답 반환
+    return {
+        "trace_id": trace_id,
+        "planText": {"planText": plan_md},
+        "evidence": evidence,
+        "received": received,
+    }
+
+
+# ───────────── 라우터 등록 ─────────────
+app.include_router(users.router)

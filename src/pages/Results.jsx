@@ -1,3 +1,4 @@
+// src/pages/Results.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../state/AppState";
 import { sendSessionSummary } from "../api/session";
@@ -109,21 +110,27 @@ export default function Results() {
       setErrorMsg("사용자 정보가 부족합니다. 프로필을 먼저 채워주세요.");
       return;
     }
+
     setLoading(true); setErrorMsg(null);
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
+
     try {
-      const { planMd, raw } = await sendSessionSummary({
+      // 🤖 처방 생성 (서버가 DB 저장까지 자동 수행)
+      const { planMd, traceId } = await sendSessionSummary({
         ...payload,
         signal: abortRef.current.signal,
       });
+
       if (!planMd) {
         setErrorMsg("서버 응답에 planMd가 없습니다.");
       } else {
-        setResultFromServer({ traceId: raw?.trace_id || "", planMd });
+        setResultFromServer({ traceId: traceId || "", planMd });
       }
     } catch (err) {
-      if (err.name !== "AbortError") setErrorMsg(err.message || "요청 중 오류가 발생했습니다.");
+      if (err.name !== "AbortError") {
+        setErrorMsg(err.message || "요청 중 오류가 발생했습니다.");
+      }
     } finally {
       setLoading(false);
     }
@@ -222,7 +229,7 @@ export default function Results() {
             <Row name="좌전굴" value={reach} unit="cm" score={scoreReach} />
             <Row name="스텝 회복기" value={step_bpm} unit="BPM" score={scoreStep} />
             <Row name="추정 VO₂max" value={vo2} unit="ml/kg/min" score={scoreVo2} />
-            {session?.traceId && !loading && !errorMsg && (
+            {session?.traceId && !loading && (
               <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
                 trace_id: {session.traceId}
               </div>
@@ -260,7 +267,6 @@ export default function Results() {
               {hasPlan && typeof PlanCards === "function" ? (
                 <PlanCards planMd={session.planMd} />
               ) : hasPlan ? (
-                // PlanCards 컴포넌트가 없을 때 fallback
                 <div style={styles.md}><ReactMarkdown>{session.planMd}</ReactMarkdown></div>
               ) : (
                 <div style={{ color: "#64748b", fontSize: 14 }}>
@@ -349,7 +355,6 @@ const styles = {
     fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif",
     color: "#0f172a",
   },
-
   rxCard: {
     background: "#ffffff",
     borderRadius: 16,
@@ -362,7 +367,6 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "space-between",
     paddingBottom: 10, borderBottom: "1px solid rgba(15,23,42,.06)", marginBottom: 10,
   },
-
   primaryBtn: {
     padding: "10px 14px",
     borderRadius: 10,
@@ -381,7 +385,6 @@ const styles = {
     fontWeight: 700,
     fontSize: 14,
   },
-
   topGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1.4fr",
@@ -409,8 +412,6 @@ const styles = {
     padding: "10px 12px",
     fontSize: 13,
   },
-
-  // ‘맞춤 운동처방’ 섹션
   planPanel: {
     marginTop: 14,
     background: "#fff",
@@ -432,15 +433,12 @@ const styles = {
   },
   legendItem: { fontSize: 12, color: "#475569", display: "flex", alignItems: "center", gap: 6 },
   dot: { display: "inline-block", width: 10, height: 10, borderRadius: 999 },
-
   planBody: { padding: 16 },
   md: {
     lineHeight: 1.6,
     fontSize: 15,
   },
   footer: { padding: "0 16px 14px" },
-
-  // 오류 및 재시도
   errorBox: {
     background: "#ffe5e5",
     border: "1px solid #ff9f9f",
@@ -459,8 +457,6 @@ const styles = {
     background: "#fff",
     cursor: "pointer",
   },
-
-  // 디버그 카드
   debugCard: {
     background: "#fafafa",
     borderRadius: 12,
