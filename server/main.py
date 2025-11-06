@@ -1,40 +1,38 @@
 # server/main.py
 from __future__ import annotations
-from fastapi import FastAPI, Request, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from typing import Any, Dict
+
 from uuid import uuid4
+from typing import Any, Dict
 import json
 import traceback
 
-# ───────────── 내부 모듈 ─────────────
-from db import Base, engine, get_db
-from .models import DBUser, DBResult
-from .routers import users  # ✅ /users 라우터 연결
+from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-# ✅ RAG 엔진 (KSPO 전용)
-from .rag.query_engine_kspo_only import (
-    generate_prescription_kspo_only,
-    _get_openai_client,
-)
+# ───────────── 내부 모듈 (server/를 루트로 실행하므로 '점(.)' 제거) ─────────────
+from db import Base, engine, get_db
+from models import DBUser, DBResult
+from routers import users
+from rag.query_engine_kspo_only import generate_prescription_kspo_only, _get_openai_client
 
 # ───────────── FastAPI 초기화 ─────────────
 app = FastAPI(title="AI Fitness API", version="0.3.1")
 
+# CORS: 운영에 맞게 도메인 제한
 PROD = "https://final-theta-peach-92.vercel.app"
 MAIN_PREVIEW = "https://final-git-main-sangyoon9902s-projects.vercel.app"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[PROD, MAIN_PREVIEW, "http://localhost:5173", "http://localhost:3000"],
-    # 모든 프리뷰 배포를 허용하고 싶으면 아래 regex 한 줄 추가 (둘 다 함께 써도 됨)
     allow_origin_regex=r"^https://final[-a-z0-9]*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # DB 테이블 자동 생성
 Base.metadata.create_all(bind=engine)
 
@@ -42,7 +40,6 @@ Base.metadata.create_all(bind=engine)
 # ───────────── 이벤트 핸들러 ─────────────
 @app.on_event("startup")
 def _startup_rag():
-    """OpenAI 클라이언트 로드 테스트"""
     try:
         _ = _get_openai_client()
         print("✅ OpenAI 클라이언트 로드 완료 (KSPO 전용)")
@@ -95,7 +92,7 @@ def session_summary_get():
 async def session_summary(req: Request, db: Session = Depends(get_db)):
     trace_id = str(uuid4())
 
-    # ✅ Step 1. JSON 파싱
+    # 1) JSON 파싱
     try:
         body: Dict[str, Any] = await req.json()
     except Exception as e:
@@ -111,7 +108,7 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
     except Exception:
         print(str(body))
 
-    # ✅ Step 2. KSPO 전용 처방 생성
+    # 2) KSPO 전용 처방 생성
     try:
         plan = generate_prescription_kspo_only(body, per_cat=3)
     except Exception as e:
@@ -119,7 +116,7 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"RAG error: {e}")
 
-    # ✅ Step 3. 응답 정규화
+    # 3) 응답 정규화
     plan_md = (
         plan.get("planText", {}).get("planText")
         or plan.get("planText")
@@ -129,12 +126,10 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
     evidence = plan.get("evidence") or []
     received = body or {}
 
-    # ✅ Step 4. DB 저장 (결과 테이블)
+    # 4) DB 저장
     try:
         user_obj = received.get("user", {})
         user_id = user_obj.get("userId")
-
-        # userId가 없으면 임시 유저 자동 생성
         if not user_id:
             tmp_user = DBUser(id=str(uuid4()), name=user_obj.get("name", "미등록"))
             db.add(tmp_user)
@@ -158,12 +153,11 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
         db.add(result)
         db.commit()
         print(f"💾 [DB 저장 완료] result_id={result.id}, user_id={user_id}")
-
     except Exception as e:
         print(f"⚠️ DB 저장 실패({trace_id}): {e}")
         traceback.print_exc()
 
-    # ✅ Step 5. 응답 반환
+    # 5) 응답 반환
     return {
         "trace_id": trace_id,
         "planText": {"planText": plan_md},
