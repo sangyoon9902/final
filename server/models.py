@@ -5,7 +5,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 
-from .db import Base
+from db import Base
 
 # ───────────────────────────────────
 # SQLAlchemy ORM Models (DB 스키마만)
