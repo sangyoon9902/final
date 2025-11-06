@@ -9,7 +9,7 @@ import json
 import traceback
 
 # ───────────── 내부 모듈 ─────────────
-from server.db import Base, engine, get_db
+from db import Base, engine, get_db
 from .models import DBUser, DBResult
 from .routers import users  # ✅ /users 라우터 연결
 from sqlalchemy.orm import Session
@@ -23,14 +23,18 @@ from .rag.query_engine_kspo_only import (
 # ───────────── FastAPI 초기화 ─────────────
 app = FastAPI(title="AI Fitness API", version="0.3.1")
 
+PROD = "https://final-theta-peach-92.vercel.app"
+MAIN_PREVIEW = "https://final-git-main-sangyoon9902s-projects.vercel.app"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 개발 중에는 * 허용 / 운영 시 특정 도메인으로 제한
+    allow_origins=[PROD, MAIN_PREVIEW, "http://localhost:5173", "http://localhost:3000"],
+    # 모든 프리뷰 배포를 허용하고 싶으면 아래 regex 한 줄 추가 (둘 다 함께 써도 됨)
+    allow_origin_regex=r"^https://final[-a-z0-9]*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # DB 테이블 자동 생성
 Base.metadata.create_all(bind=engine)
 
