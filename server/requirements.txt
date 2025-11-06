@@ -1,6 +1,9 @@
 fastapi==0.115.0
-uvicorn[standard]==0.30.6
-SQLAlchemy==2.0.36
-pydantic==2.9.2
+uvicorn==0.30.0
+sqlalchemy==2.0.36
 python-dotenv==1.0.1
-openai>=1.0.0
+pandas==2.2.2
+faiss-cpu==1.8.0
+numpy==1.26.4
+joblib==1.4.2
+openai==1.35.13
