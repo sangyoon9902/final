@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 import os, json, re
 
+import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -17,13 +18,36 @@ SERVER_DIR = Path(__file__).resolve().parent.parent  # server/
 ENV_PATH = SERVER_DIR / ".env"
 load_dotenv(ENV_PATH)
 
+# OPENAI_API_KEY 환경변수 보정(비어있으면 빈 문자열)
 _k = (os.getenv("OPENAI_API_KEY") or "").strip()
 os.environ["OPENAI_API_KEY"] = _k
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
-    organization=os.getenv("OPENAI_ORG_ID")
-)
+# ───────── OpenAI 클라이언트: 지연 초기화(lazy init) ─────────
+__openai_client: Optional[OpenAI] = None
+def _get_openai_client() -> OpenAI:
+    """
+    - import 시점이 아니라 호출 시점에 초기화
+    - proxies는 httpx.Client를 통해 설정 (OpenAI(...)에 proxies 인자 직접 전달 금지)
+    """
+    global __openai_client
+    if __openai_client is not None:
+        return __openai_client
+
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    base_url = (os.getenv("OPENAI_BASE_URL") or "").strip() or None
+    org_id   = (os.getenv("OPENAI_ORG_ID") or "").strip() or None
+
+    proxy = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
+    http_client = httpx.Client(proxies=proxy, timeout=30.0) if proxy else None
+
+    __openai_client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        organization=org_id if org_id else None,
+        http_client=http_client,
+    )
+    return __openai_client
+
 
 VALID_CATS = ["심폐지구력", "근력/근지구력", "유연성"]
 
@@ -194,7 +218,6 @@ def _mk_terms(payload: Dict[str, Any]) -> List[str]:
     if m.get("step_vo2max") is not None: terms += ["VO2max", "심폐", "중강도", "고강도"]
 
     risk_flags = []
-    # survey1/high_risk, survey4/frailty_flag 등 키워드가 있으면 안전 관련 용어 강화
     s1 = (surveys.get("survey1") or {})
     if s1.get("high_risk") is True: risk_flags.append("parq_high_risk")
     s4 = (surveys.get("survey4") or {})
@@ -276,10 +299,6 @@ def _format_fitt_card(
     rule_or_caution: str,
     csv_id: str = ""
 ) -> str:
-    """
-    요구된 최종 카드 양식으로 강제 포맷.
-    (라벨 줄 + 값 줄 / 이모지 / CSV:숫자 라인까지 고정)
-    """
     lines = [
         "종목",
         f"{name}",
@@ -302,7 +321,6 @@ def _format_fitt_card(
 
 # ───────── LLM 응답 파서(콜론/개행 둘 다 허용) ─────────
 def _grab_after(label_pat: str, block: str) -> str:
-    # "라벨\n값" 또는 "라벨: 값" 모두 허용
     m = re.search(rf"{label_pat}\s*\n\s*(.+)", block)
     if m: return m.group(1).strip()
     m = re.search(rf"{label_pat}\s*:\s*(.+)", block)
@@ -324,15 +342,12 @@ def _cut(ans: str, start_pat: str, end_pats: List[str]) -> str:
     return ans[s:e].strip()
 
 def _split_main_sections(ans: str) -> Tuple[str, str, str]:
-    # 1) 유산소(심폐) 2) 근력/근지구력 3) 유연성
     a = _cut(ans, r"\b1\)\s*유산소\(심폐\)", [r"\n2\)\s*근력/근지구력", r"\n3\)\s*유연성", r"\n### "])
     s = _cut(ans, r"\b2\)\s*근력/근지구력", [r"\n3\)\s*유연성", r"\n### "])
     f = _cut(ans, r"\b3\)\s*유연성", [r"\n### "])
     return a or "", s or "", f or ""
 
-# 추가: 설문 파생 블록 파서
 def _extract_extra_blocks(ans: str) -> Dict[str, str]:
-    # 헤더는 프롬프트에서 고정: "### 설문 1·4 기반 주의사항 (ACSM 근거)" 등
     b1 = _cut(ans, r"###\s*설문\s*1·4\s*기반\s*주의사항\s*\(ACSM 근거\)", ["\n### "])
     b2 = _cut(ans, r"###\s*설문\s*2\s*기반\s*상담/동기부여\s*\(ACSM 근거\)", ["\n### "])
     b3 = _cut(ans, r"###\s*설문\s*3\s*기반\s*달성\s*전략", ["\n### "])
@@ -401,6 +416,7 @@ def _cards_from_llm(answer: str, kspo_plan: Dict[str, Any], csv_neighbors: List[
 # ───────── OpenAI 호출 ─────────
 def call_openai(system_prompt: str, user_prompt: str) -> str:
     try:
+        client = _get_openai_client()
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -462,7 +478,6 @@ def build_kspo_prompt(payload: Dict[str, Any],
     csv_md   = _fmt_csv_block(csv_neighbors)
     acsm_md  = _fmt_acsm_block(acsm_cands)
 
-    # ── SYSTEM: 설문 규칙 + 안전 원칙 + 자리표시자 유지 지시 ──
     system = (
         "당신은 임상 운동전문가이자 운동처방 코치입니다. 한국어로 작성합니다. "
         "아래 ‘출력 형식’의 제목/라벨/순서/구두점을 1자도 바꾸지 말고 그대로 채우세요. "
@@ -482,7 +497,6 @@ def build_kspo_prompt(payload: Dict[str, Any],
         "앉아있기 ≥120분/일 → 30~45분마다 1~2분 기립/보행. 고강도 과다 시 중강도·휴식일 배치.\n"
     )
 
-    # ── USER: 요약 + 허용리스트 + 근거 + 설문 JSON + 출력 템플릿 ──
     user_prompt = (
         "=== 사용자 요약 ===\n"
         f"성별: {u.get('sex')} | 나이: {u.get('age')}\n"
@@ -540,23 +554,19 @@ def generate_prescription_kspo_only(
     payload: Dict[str, Any],
     *,
     top_k: int = 10,
-    per_cat: int = 1,      # (현재 미사용; 인터페이스 유지)
+    per_cat: int = 1,
     acsm_top_k: int = 8
 ) -> Dict[str, Any]:
-    # 1) CSV 유사 사례
     u = payload.get("user", {}) or {}
     m = payload.get("measurements", {}) or {}
     csv_neighbors = retrieve_similar_structured(u, m, top_k=top_k, overfetch=top_k*10)
 
-    # 2) CSV 사례 텍스트 → 종목 빈도 dict
     freq = _extract_names_from_csv_neighbors(csv_neighbors)
 
-    # 3) KSPO 매칭/대표영상(초기 선택; 나이 우선 적용)
     kspo_meta_path = _kspo_meta_path()
     user_age = (payload.get("user") or {}).get("age")
     kspo_plan = prescribe_from_freq_and_kspo(freq, kspo_meta_path, user_age=user_age)
 
-    # 3-1) 동일 제목 중복 시 target(정확 라벨) 우선 재랭크
     meta_rows = _load_json_list(_kspo_meta_path())
     user_band = _age_band_from_age(user_age)
     for cat in VALID_CATS:
@@ -571,14 +581,11 @@ def generate_prescription_kspo_only(
         if best and best is not v:
             kspo_plan["videos"][cat] = best
 
-    # 4) ACSM6 근거 후보
     acsm_cands = retrieve_acsm_candidates(payload, top_k=acsm_top_k)
 
-    # 5) 프롬프트 생성 및 호출
     prompts = build_kspo_prompt(payload, csv_neighbors, kspo_plan, acsm_cands)
     answer = call_openai(prompts["system"], prompts["user"]) or ""
 
-    # 6) 자리표시자 치환
     aero_head = _head_line_for_category("심폐지구력", kspo_plan)
     str_head  = _head_line_for_category("근력/근지구력", kspo_plan)
     flex_head = _head_line_for_category("유연성", kspo_plan)
@@ -596,10 +603,8 @@ def generate_prescription_kspo_only(
         .replace("<<TYPE_FLEX>>", flex_line)
     )
 
-    # 7) 메인 3종 카드 변환
     cards_text = _cards_from_llm(answer, kspo_plan, csv_neighbors)
 
-    # 7-1) 설문 파생 블록 추출
     extra = _extract_extra_blocks(answer)
     extra_md_parts = []
     if extra.get("survey14_caution"):
@@ -610,7 +615,6 @@ def generate_prescription_kspo_only(
         extra_md_parts.append("### 설문 3 기반 달성 전략\n" + extra["survey3_action"].strip())
     extra_md = ("\n\n" + "\n\n".join(extra_md_parts)) if extra_md_parts else ""
 
-    # 8) 대표 영상 필드 정규화 (디버그/프런트 부가정보)
     def _as_int(x):
         try: return int(float(x))
         except Exception: return None
@@ -631,13 +635,11 @@ def generate_prescription_kspo_only(
         }
     videos_projected = {cat: _project_video(kspo_plan.get("videos", {}).get(cat)) for cat in VALID_CATS}
 
-    # 9) 최종 반환
     return {
         "planText": {
-            # 프런트에서는 planMd처럼 그대로 뿌려도 됨(카드 3종 + 설문 파생 블록)
             "planText": (cards_text + extra_md).strip(),
             "cardsOnly": cards_text.strip(),
-            "surveyBlocks": extra,  # 개별 접근이 필요할 때 사용
+            "surveyBlocks": extra,
             "debug": {
                 "query": "csv-kNN → KSPO allow-list + ACSM6 (+age-target rerank)",
                 "args": {"top_k": top_k, "per_cat": per_cat, "acsm_top_k": acsm_top_k},
@@ -676,12 +678,8 @@ def _load_json_list(path: str) -> List[Dict[str, Any]]:
             data = json.load(f)
         if isinstance(data, list):
             return data
-        # 혹시 {"docs":[...]} 형태일 수도 있음
         return data.get("docs") or data.get("items") or []
     except Exception:
         return []
-
-def _get_openai_client() -> OpenAI:
-    return client
 
 __all__ = ["generate_prescription_kspo_only", "rag_status", "_get_openai_client"]
