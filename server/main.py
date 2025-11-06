@@ -9,7 +9,7 @@ import json
 import traceback
 
 # ───────────── 내부 모듈 ─────────────
-from .db import Base, engine, get_db
+from server.db import Base, engine, get_db
 from .models import DBUser, DBResult
 from .routers import users  # ✅ /users 라우터 연결
 from sqlalchemy.orm import Session
