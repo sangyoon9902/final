@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from uuid import uuid4
 from sqlalchemy.orm import Session
-from ..db import get_db
-from ..models import DBUser
+from db import get_db
+from models import DBUser
 
 router = APIRouter(prefix="/users", tags=["users"])
 
