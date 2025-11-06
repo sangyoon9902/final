@@ -9,7 +9,7 @@ import Start from "./pages/Start.jsx";
 import Select from "./pages/Select.jsx";
 import Results from "./pages/Results.jsx";
 
-import MeasureSitup from "./pages/MeasureSitUp.jsx";        // 파일명 대소문자 확인
+import MeasureSitUp from "./pages/MeasureSitUp.jsx";        // 파일명 대소문자 확인
 import MeasureReach from "./pages/MeasureSitAndReach.jsx";
 import MeasureStep from "./pages/MeasureStep.jsx";
 
@@ -30,7 +30,7 @@ const router = createBrowserRouter([
       { path: "results", element: <Results /> },
 
       // 측정 페이지들
-      { path: "measure/situp", element: <MeasureSitup /> },
+      { path: "measure/sitUp", element: <MeasureSitUp /> },
       { path: "measure/reach", element: <MeasureReach /> },
       { path: "measure/step", element: <MeasureStep /> },
 
