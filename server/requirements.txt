@@ -11,14 +11,14 @@ python-dotenv==1.0.1
 joblib==1.4.2
 
 # --- Data stack ---
-numpy==1.26.4          # Py3.11에서 가장 안정
+numpy==1.26.4
 pandas==2.2.2
 
 # --- Vector search ---
-faiss-cpu==1.8.0.post1 # manylinux 휠 존재(Python 3.11 권장)
+faiss-cpu==1.8.0.post1   # manylinux 휠 존재(Py3.11에서 안정)
 
 # --- OpenAI ---
 openai==1.35.13
 
-# --- (옵션) 필요시만 ---
+# --- (옵션) 필요할 때만 ---
 scikit-learn==1.5.1
