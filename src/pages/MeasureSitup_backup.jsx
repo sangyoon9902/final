@@ -9,7 +9,7 @@ import { IDX, VIS_TH, SIT_SIDE_MIN } from "../utils/poseIdx";
 import { angleDeg } from "../utils/math";
 import { useApp } from "../state/AppState"; // ✅ 전역 세션 저장을 위해 추가
 
-export default function MeasureSitup() {
+export default function MeasureSitUp() {
   const nav = useNavigate();
   const { setSession } = useApp(); // ✅ 추가: 완료 결과를 전역으로 저장
 
