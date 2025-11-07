@@ -1,3 +1,4 @@
+// src/main.jsx
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
@@ -17,6 +18,8 @@ import Survey1 from "./pages/survey1.jsx";
 import Survey2 from "./pages/survey2.jsx";
 import Survey3 from "./pages/survey3.jsx";
 import Survey4 from "./pages/survey4.jsx";
+import Review from "./pages/Review.jsx";  
+
 
 
 // 라우터 정의
@@ -40,7 +43,8 @@ const router = createBrowserRouter([
       { path: "survey3", element: <Survey3 /> },
       { path: "survey4", element: <Survey4 /> },
 
-     
+      { path: "review", element: <Review /> },
+  // ⬅️ 라우트 추가
 
     ],
   },
