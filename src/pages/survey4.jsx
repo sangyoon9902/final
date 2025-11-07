@@ -1,7 +1,7 @@
 // src/pages/Survey4.jsx
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp } from "../state/AppState"; // ✅ 추가
+import { useApp } from "../state/AppState"; // ✅ 경로 수정
 
 /**
  * Survey4 – 노쇠 설문 (4/4)
@@ -11,8 +11,8 @@ import { useApp } from "../state/AppState"; // ✅ 추가
  * 4) 1년 전 대비 체중 5% 이상 감소? (예면 감소 kg 입력)
  *
  * 저장:
- *   1) localStorage("survey").survey4 로 저장
- *   2) AppProvider.surveys.survey4 로 저장
+ * 1) localStorage("survey").survey4 로 저장
+ * 2) AppProvider.surveys.survey4 로 저장
  *
  * 이동: 이전 → /survey3, 완료 → /select
  */
@@ -138,6 +138,19 @@ export default function Survey4() {
     minWidth: 120,
   };
 
+  // 👇 [추가됨] 버튼 공통 스타일
+  const baseButtonStyle = {
+    flex: 1, // 버튼이 공간을 균등하게 차지
+    padding: "16px", // 버튼 크기 (높이) 키움
+    borderRadius: 10,
+    border: 0,
+    color: "#fff",
+    fontSize: "16px", // 폰트 크기 키움
+    fontWeight: 700, // 폰트 굵게
+    cursor: "pointer",
+    textAlign: "center",
+  };
+
   return (
     <div style={wrap}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 16 }}>
@@ -256,22 +269,22 @@ export default function Survey4() {
         </div>
       )}
 
-      {/* 하단 버튼 */}
+      {/* 👇 [수정됨] 하단 버튼 컨테이너 */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          marginTop: 16,
+          justifyContent: "center", // 중앙 정렬
+          gap: "16px", // 버튼 사이 간격
+          marginTop: "24px", // 위쪽 여백
+          marginBottom: "12px", // 아래쪽 여백
         }}
       >
         <button
           type="button"
           onClick={handlePrev}
           style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
+            ...baseButtonStyle,
+            background: "#45474B", // 어두운 회색
           }}
         >
           이전
@@ -282,18 +295,24 @@ export default function Survey4() {
           onClick={handleSubmit}
           disabled={touched && !isValid}
           style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: 0,
-            background: "#2f5aff",
-            color: "#fff",
+            ...baseButtonStyle,
+            background: "#2B2D42", // 어두운 남색
+            opacity: touched && !isValid ? 0.7 : 1, // 유효하지 않을 때 투명도
           }}
         >
           설문 완료
         </button>
       </div>
 
-      <p style={{ marginTop: 10, color: "#6b7280", fontSize: 13 }}>
+      {/* 👇 [수정됨] 안내 문구 중앙 정렬 */}
+      <p
+        style={{
+          marginTop: 10,
+          color: "#6b7280",
+          fontSize: 13,
+          textAlign: "center",
+        }}
+      >
         ※ 각 문항에 ‘예’ 또는 ‘아니오’를 선택하세요. 1개 이상 ‘예’인 경우 전문가 상담을 권장합니다.
       </p>
     </div>

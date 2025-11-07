@@ -10,8 +10,8 @@ import { useApp } from "../state/AppState"; // ✅ 추가
  * - Q3: 운동 시작/지속 어려움(복수선택 + 기타)
  *
  * 저장:
- *   1) localStorage("survey").survey2 에 저장
- *   2) AppProvider.surveys.survey2 에도 저장
+ * 1) localStorage("survey").survey2 에 저장
+ * 2) AppProvider.surveys.survey2 에도 저장
  *
  * 이동: 이전 → /survey1, 다음 → /survey3
  */
@@ -103,6 +103,19 @@ export default function Survey2() {
   const Error = ({ show, children }) =>
     show ? <div style={{ color: "#d33", fontSize: 13, marginTop: 6 }}>{children}</div> : null;
 
+  // 👇 [추가됨] 버튼 공통 스타일
+  const baseButtonStyle = {
+    flex: 1, // 버튼이 공간을 균등하게 차지
+    padding: "16px", // 버튼 크기 (높이) 키움
+    borderRadius: 10,
+    border: 0,
+    color: "#fff",
+    fontSize: "16px", // 폰트 크기 키움
+    fontWeight: 700, // 폰트 굵게
+    cursor: "pointer",
+    textAlign: "center",
+  };
+
   return (
     <div style={{ maxWidth: 880, margin: "40px auto", padding: "0 16px" }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 16 }}>
@@ -156,7 +169,7 @@ export default function Survey2() {
             )}
           </div>
 
-          <Error show={touched && !q1}>
+          <Error show={touched && (!q1 || (q1 === "기타" && !q1Etc.trim()))}>
             목적을 선택해주세요. (기타 선택 시 내용 입력)
           </Error>
           <hr style={{ margin: "18px 0" }} />
@@ -288,22 +301,22 @@ export default function Survey2() {
         </div>
       </div>
 
-      {/* 하단 버튼 */}
+      {/* 👇 [수정됨] 하단 버튼 컨테이너 */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          marginTop: 16,
+          justifyContent: "center", // 중앙 정렬
+          gap: "16px", // 버튼 사이 간격
+          marginTop: "24px", // 위쪽 여백
+          marginBottom: "12px", // 아래쪽 여백
         }}
       >
         <button
           type="button"
           onClick={() => navigate("/survey1")}
           style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
+            ...baseButtonStyle,
+            background: "#45474B", // 어두운 회색
           }}
         >
           이전
@@ -312,19 +325,29 @@ export default function Survey2() {
         <button
           type="button"
           onClick={handleNext}
-          disabled={!isValid && touched}
+          disabled={!isValid && touched} // disabled 상태는 유지
           style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: 0,
-            background: "#2f5aff",
-            color: "#fff",
-            opacity: isValid ? 1 : 0.95,
+            ...baseButtonStyle,
+            background: "#2B2D42", // 어두운 남색
+            // 유효하지 않을 때 투명도 조절
+            opacity: !isValid && touched ? 0.7 : 1,
           }}
         >
           다음
         </button>
       </div>
+
+      {/* 👇 [추가됨] 안내 문구 중앙 정렬 (Survey1과 통일) */}
+      <p
+        style={{
+          marginTop: 10,
+          color: "#6b7280",
+          fontSize: 13,
+          textAlign: "center",
+        }}
+      >
+        ※ 모든 문항에 답변해야 다음 단계로 이동할 수 있습니다.
+      </p>
     </div>
   );
 }

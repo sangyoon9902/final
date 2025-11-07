@@ -174,7 +174,7 @@ def _extract_names_from_csv_neighbors(csv_neighbors: List[Dict[str, Any]]) -> Di
                 bag[p] = bag.get(p, 0) + 1
     return bag
 
-# ───────── ACSM6 간단 후보 검색기 ─────────
+# ───────── ACSM6 간단 후보 검색기 (설문 의존 제거) ─────────
 def _load_acsm_meta() -> List[Dict[str, Any]]:
     p = _acsm_meta_path()
     if not os.path.exists(p):
@@ -198,9 +198,9 @@ def _match_score(text: str, q_terms: List[str]) -> int:
     return s
 
 def _mk_terms(payload: Dict[str, Any]) -> List[str]:
+    """설문 불사용: 사용자 프로필/측정치만으로 검색어 구성"""
     u = payload.get("user") or {}
     m = payload.get("measurements") or {}
-    surveys = payload.get("surveys") or {}
 
     terms = [
         "유산소", "근력", "근지구력", "유연성",
@@ -209,21 +209,13 @@ def _mk_terms(payload: Dict[str, Any]) -> List[str]:
     age = u.get("age")
     sex = (u.get("sex") or "").upper()
     if isinstance(age, (int, float)):
-        if age >= 65: terms += ["고령자", "노인", "낙상", "균형"]
+        if age >= 65: terms += ["고령자", "노인", "균형", "낙상 예방"]
         elif age <= 18: terms += ["청소년", "소아"]
     if sex in ("F","M"): terms.append(f"성별:{sex}")
 
     if m.get("situp_reps") is not None: terms += ["복근", "체간", "코어"]
     if m.get("reach_cm") is not None: terms += ["좌전굴", "햄스트링", "유연성"]
     if m.get("step_vo2max") is not None: terms += ["VO2max", "심폐", "중강도", "고강도"]
-
-    risk_flags = []
-    s1 = (surveys.get("survey1") or {})
-    if s1.get("high_risk") is True: risk_flags.append("parq_high_risk")
-    s4 = (surveys.get("survey4") or {})
-    if s4.get("frailty_flag") is True: risk_flags.append("frailty_flag")
-    if risk_flags:
-        terms += ["안전", "금기", "모니터링", "고위험", "의학적 평가"]
 
     return list(dict.fromkeys(terms))
 
@@ -342,20 +334,10 @@ def _cut(ans: str, start_pat: str, end_pats: List[str]) -> str:
     return ans[s:e].strip()
 
 def _split_main_sections(ans: str) -> Tuple[str, str, str]:
-    a = _cut(ans, r"\b1\)\s*유산소\(심폐\)", [r"\n2\)\s*근력/근지구력", r"\n3\)\s*유연성", r"\n### "])
-    s = _cut(ans, r"\b2\)\s*근력/근지구력", [r"\n3\)\s*유연성", r"\n### "])
-    f = _cut(ans, r"\b3\)\s*유연성", [r"\n### "])
+    a = _cut(ans, r"\b1\)\s*유산소\(심폐\)", [r"\n2\)\s*근력/근지구력", r"\n3\)\s*유연성"])
+    s = _cut(ans, r"\b2\)\s*근력/근지구력", [r"\n3\)\s*유연성"])
+    f = _cut(ans, r"\b3\)\s*유연성", [])
     return a or "", s or "", f or ""
-
-def _extract_extra_blocks(ans: str) -> Dict[str, str]:
-    b1 = _cut(ans, r"###\s*설문\s*1·4\s*기반\s*주의사항\s*\(ACSM 근거\)", ["\n### "])
-    b2 = _cut(ans, r"###\s*설문\s*2\s*기반\s*상담/동기부여\s*\(ACSM 근거\)", ["\n### "])
-    b3 = _cut(ans, r"###\s*설문\s*3\s*기반\s*달성\s*전략", ["\n### "])
-    return {
-        "survey14_caution": b1.strip(),
-        "survey2_motivation": b2.strip(),
-        "survey3_action": b3.strip(),
-    }
 
 def _cards_from_llm(answer: str, kspo_plan: Dict[str, Any], csv_neighbors: List[Dict[str, Any]]) -> str:
     a_blk, s_blk, f_blk = _split_main_sections(answer)
@@ -472,29 +454,18 @@ def build_kspo_prompt(payload: Dict[str, Any],
                       acsm_cands: List[Dict[str, Any]]) -> Dict[str, str]:
     u = payload.get("user", {}) or {}
     m = payload.get("measurements", {}) or {}
-    surveys = payload.get("surveys", {}) or {}
 
     allow_md = _fmt_allowlist(kspo_plan.get("top_per_category", {}), kspo_plan.get("videos", {}))
     csv_md   = _fmt_csv_block(csv_neighbors)
     acsm_md  = _fmt_acsm_block(acsm_cands)
 
+    # 설문 완전 제거: 설문 JSON/요약/블록 없음
     system = (
         "당신은 임상 운동전문가이자 운동처방 코치입니다. 한국어로 작성합니다. "
-        "아래 ‘출력 형식’의 제목/라벨/순서/구두점을 1자도 바꾸지 말고 그대로 채우세요. "
+        "아래 ‘출력 형식’의 제목/라벨/순서/구두점을 그대로 따르세요. "
         "유형(T) 자리표시자(<<TYPE_*>>)와 종목 헤드(<<HEAD_*>>)는 그대로 출력합니다(후처리로 치환됨). "
-        "모든 권고 항목의 근거는 [CSV:row_id], [ACSM6:doc_id]를 반드시 포함하세요.\n"
-        "[데이터 원칙]\n"
-        "- KSPO 허용 리스트 내 종목/영상만 사용.\n"
-        "- FITT 수치를 명확히 제시.\n"
-        "- 안전 최우선: PAR-Q/노쇠 신호가 있으면 저강도/점진·증상 모니터링·의료상담 권고.\n"
-        "[설문 해석 규칙]\n"
-        "- 설문1(PAR-Q): Q2=예(운동 시 흉통) → 저강도 시작, 증상 모니터링, 의료평가 권고. "
-        "Q5=예(근골격 문제) → 통증 유발 동작 회피·ROM 내 수행·저충격 대체. high_risk=true → 초기 1~2주 RPE 9~11.\n"
-        "- 설문4(노쇠): frailty_flag=true 또는 피로/보행곤란=예 → 균형·기능 중심, 세트·시간 축소, 휴식 연장.\n"
-        "- 설문2(목적/장벽): ‘체력측정(채용용)’이면 검사 점수 향상 지향(기본기·안전·규칙성). "
-        "장벽: 흥미부재→게임화/챌린지, 효과불확실→주간 지표 시각화(RPE·휴식심박·세트수), 시간부족→10~15분 블록, 통증→저강도·대체동작.\n"
-        "- 설문3(IPAQ): MET 변환(고강도8.0·중강도4.0·걷기3.3)으로 주간 총량 분류(≥3000 높음/≥600 중간/그 외 낮음). "
-        "앉아있기 ≥120분/일 → 30~45분마다 1~2분 기립/보행. 고강도 과다 시 중강도·휴식일 배치.\n"
+        "모든 권고 항목에 대해 필요시 [CSV:row_id], [ACSM6:doc_id]를 포함하되 과잉 인용은 금지합니다.\n"
+        "[원칙] KSPO 허용 리스트 내 종목/영상만 사용, FITT 수치 명확, 안전 최우선."
     )
 
     user_prompt = (
@@ -505,7 +476,6 @@ def build_kspo_prompt(payload: Dict[str, Any],
         "\n=== 허용 리스트(필수 준수; KSPO 매칭 결과) ===\n" + allow_md +
         "\n\n=== 유사 사례 근거 Top-K (CSV) ===\n" + csv_md +
         "\n\n=== ACSM6 근거 후보 ===\n" + acsm_md +
-        "\n\n=== 설문 JSON ===\n" + json.dumps(surveys, ensure_ascii=False) +
         "\n\n[출력 형식]\n"
         "맞춤 운동처방 (4~6주)\n"
         "1) 유산소(심폐)\n"
@@ -538,15 +508,6 @@ def build_kspo_prompt(payload: Dict[str, Any],
         "근거 추적표\n"
         "| 항목 | 선택 이유(핵심) | CSV | ACSM6 |\n"
         "|---|---|---|---|\n"
-        "\n"
-        "### 설문 1·4 기반 주의사항 (ACSM 근거)\n"
-        "- …\n"
-        "\n"
-        "### 설문 2 기반 상담/동기부여 (ACSM 근거)\n"
-        "- …\n"
-        "\n"
-        "### 설문 3 기반 달성 전략\n"
-        "- …\n"
     )
     return {"system": system, "user": user_prompt}
 
@@ -567,6 +528,7 @@ def generate_prescription_kspo_only(
     user_age = (payload.get("user") or {}).get("age")
     kspo_plan = prescribe_from_freq_and_kspo(freq, kspo_meta_path, user_age=user_age)
 
+    # 연령대 타깃 리랭크
     meta_rows = _load_json_list(_kspo_meta_path())
     user_band = _age_band_from_age(user_age)
     for cat in VALID_CATS:
@@ -586,6 +548,7 @@ def generate_prescription_kspo_only(
     prompts = build_kspo_prompt(payload, csv_neighbors, kspo_plan, acsm_cands)
     answer = call_openai(prompts["system"], prompts["user"]) or ""
 
+    # 자리표시자 치환
     aero_head = _head_line_for_category("심폐지구력", kspo_plan)
     str_head  = _head_line_for_category("근력/근지구력", kspo_plan)
     flex_head = _head_line_for_category("유연성", kspo_plan)
@@ -605,15 +568,8 @@ def generate_prescription_kspo_only(
 
     cards_text = _cards_from_llm(answer, kspo_plan, csv_neighbors)
 
-    extra = _extract_extra_blocks(answer)
-    extra_md_parts = []
-    if extra.get("survey14_caution"):
-        extra_md_parts.append("### 설문 1·4 기반 주의사항 (ACSM 근거)\n" + extra["survey14_caution"].strip())
-    if extra.get("survey2_motivation"):
-        extra_md_parts.append("### 설문 2 기반 상담/동기부여 (ACSM 근거)\n" + extra["survey2_motivation"].strip())
-    if extra.get("survey3_action"):
-        extra_md_parts.append("### 설문 3 기반 달성 전략\n" + extra["survey3_action"].strip())
-    extra_md = ("\n\n" + "\n\n".join(extra_md_parts)) if extra_md_parts else ""
+    # 설문 블록 완전 제거 → extra_md 없음
+    extra_md = _advice_from_surveys_llm(payload, acsm_cands)  
 
     def _as_int(x):
         try: return int(float(x))
@@ -639,7 +595,6 @@ def generate_prescription_kspo_only(
         "planText": {
             "planText": (cards_text + extra_md).strip(),
             "cardsOnly": cards_text.strip(),
-            "surveyBlocks": extra,
             "debug": {
                 "query": "csv-kNN → KSPO allow-list + ACSM6 (+age-target rerank)",
                 "args": {"top_k": top_k, "per_cat": per_cat, "acsm_top_k": acsm_top_k},
@@ -683,3 +638,186 @@ def _load_json_list(path: str) -> List[Dict[str, Any]]:
         return []
 
 __all__ = ["generate_prescription_kspo_only", "rag_status", "_get_openai_client"]
+
+
+# === REPLACE: 설문 요약 → Markdown ============================================
+def _surveys_to_md(payload: Dict[str, Any]) -> str:
+    surveys = payload.get("surveys") or {}
+    u = payload.get("user") or {}
+    m = payload.get("measurements") or {}
+
+    # ---------- Survey1 (PAR-Q: 7문항 + high_risk) ----------
+    s1 = surveys.get("survey1") or {}
+    s1_items = s1.get("items") or []
+    s1_yes = [it for it in s1_items if (it.get("answer") == "예")]
+    s1_yes_list = [f"{it.get('no')}. {it.get('question')}" for it in s1_yes]
+
+    # 안전 신호 플래그
+    parq_flags = {
+        "any_yes": any(True for _ in s1_yes),
+        "yes_items_count": len(s1_yes),
+        "high_risk": bool(s1.get("high_risk")),
+        # 특정 중요 문항(흉통/실신/의사진단 등)에 가중치를 둘 수 있도록 번호 보존
+        "critical_nos": [it.get("no") for it in s1_yes if it.get("no") in (1,2,3,5,6,7)],
+    }
+
+    # ---------- Survey4 (노쇠/Frailty) ----------
+    s4 = surveys.get("survey4") or {}
+    s4_yes_cnt = int(s4.get("yes_count") or 0)
+    # 체중감소(문항 4) 세부
+    wt_loss_kg = None
+    try:
+        it4 = next((x for x in (s4.get("items") or []) if x.get("no")==4), None)
+        if it4 and it4.get("answer") == "예":
+            wt_loss_kg = (it4.get("extra") or {}).get("weight_loss_kg")
+    except: 
+        pass
+
+    frailty = {
+        "yes_count": s4_yes_cnt,
+        "weight_loss_kg": wt_loss_kg,
+        "prefrail_or_frail": "frail" if s4_yes_cnt >= 3 else ("prefrail" if s4_yes_cnt >= 1 else "robust"),
+    }
+
+    # ---------- Survey2 (동기/장벽) ----------
+    s2 = surveys.get("survey2") or {}
+    barriers = s2.get("barriers") or []
+    motive = (s2.get("motive") or "").strip()
+    past = s2.get("past_exercise") or {}
+    behavior = {
+        "motive": motive,
+        "barriers": barriers,
+        "has_past_exercise": bool(past.get("has_experience")),
+        "preferred_time": s2.get("preferred_time") or "",
+        "preferred_place": s2.get("preferred_place") or "",
+        "social_support": s2.get("social_support") or "",  # 있으면 친구/가족/동호회 등
+    }
+
+    # ---------- Survey3 (IPAQ) ----------
+    s3 = surveys.get("survey3") or {}
+    def _mins(days, per_day): 
+        try: return max(0,int(days or 0))*max(0,int(per_day or 0))
+        except: return 0
+    vig = s3.get("vigorous") or {"days":0,"min_per_day":0,"none":False}
+    mod = s3.get("moderate") or {"days":0,"min_per_day":0,"none":False}
+    wlk = s3.get("walking")  or {"days":0,"min_per_day":0,"none":False}
+    weekly_vig = _mins(vig.get("days",0), vig.get("min_per_day",0))
+    weekly_mod = _mins(mod.get("days",0), mod.get("min_per_day",0))
+    weekly_wlk = _mins(wlk.get("days",0), wlk.get("min_per_day",0))
+    weekly_meeq = weekly_mod + weekly_wlk + weekly_vig*2  # 고강도×2 가중
+
+    # 간단 분류(ACSM/WHO 권고 대비)
+    if weekly_meeq >= 300:
+        ipaq_level = "high"
+    elif weekly_meeq >= 150:
+        ipaq_level = "moderate"
+    else:
+        ipaq_level = "low"
+
+    ipaq = {
+        "weekly_vigorous_min": weekly_vig,
+        "weekly_moderate_min": weekly_mod,
+        "weekly_walking_min": weekly_wlk,
+        "weekly_moderate_equiv_min": weekly_meeq,
+        "ipaq_level": ipaq_level,  # low / moderate / high
+        "sitting_min_per_day": int(s3.get("sitting_min_per_day") or 0),
+    }
+
+    # ---------- 사용자/측정 ----------
+    user_core = {
+        "sex": u.get("sex"),
+        "age": u.get("age"),
+        "height_cm": u.get("height_cm"),
+        "weight_kg": u.get("weight_kg"),
+        "bmi": u.get("bmi"),
+    }
+    meas = {
+        "situp_reps": (m.get("situp_reps")),
+        "reach_cm": (m.get("reach_cm")),
+        "vo2max": (m.get("step_vo2max")),
+    }
+
+    # ---------- 사람이 읽을 수 있는 MD + 기계친화 JSON 블록 ----------
+    import json
+    obj = {
+        "user": user_core,
+        "measurements": meas,
+        "safety": {"parq": parq_flags, "frailty": frailty},
+        "behavior": behavior,
+        "activity": ipaq,
+    }
+
+    md = (
+        "#### 설문/측정 구조 요약(JSON)\n"
+        f"```json\n{json.dumps(obj, ensure_ascii=False, indent=2)}\n```\n"
+        "※ 위 구조를 기반으로 안전/주의(1,4번), 동기·장벽/활동전략(2,3번)을 분리 반영하세요."
+    )
+    return md
+
+
+
+# === NEW: LLM 기반 설문 맞춤 ACSM6 조언 ======================================
+# === REPLACE: LLM 기반 설문 맞춤 ACSM6 조언 ====================================
+def _advice_from_surveys_llm(payload: Dict[str, Any], acsm_cands: List[Dict[str, Any]]) -> str:
+    """
+    Survey1/4 → 안전·주의/금기·자각증상 대응
+    Survey2/3 → 동기/장벽, 활동수준(IPAQ) 기반 행동전략·목표 설계
+    출력은 섹션화하고, 적절한 [ACSM6:doc_id] 인용 포함.
+    """
+    surveys_md = _surveys_to_md(payload)
+
+    def _short(s: str, n: int = 400) -> str:
+        s = (s or "").strip()
+        return (s[:n].rstrip()+"…") if len(s) > n else s
+
+    acsm_lines = []
+    for c in (acsm_cands or []):
+        did = c.get("doc_id") or "ACSM6:UNK"
+        ttl = c.get("title") or "(제목 없음)"
+        exc = _short(c.get("excerpt") or "")
+        kws = ", ".join(c.get("keywords") or [])
+        acsm_lines.append(f"- {did} | {ttl}\n  - keywords: {kws}\n  - excerpt: {exc}")
+    acsm_md = "\n".join(acsm_lines) if acsm_lines else "(ACSM6 후보 없음)"
+
+    system_prompt = (
+        "당신은 임상 운동전문가이자 **ACSM 제6판(ACSM6)** 기반 코치입니다. "
+        "설문 1·4(안전/금기/자각증상/노쇠)와 설문 2·3(동기/장벽/활동수준)을 구분하여 "
+        "사용자 맞춤 **실행가능 조언**을 한국어로 제공합니다. "
+        "모든 권고는 안전을 최우선으로 합니다. "
+        "반드시 적절한 곳에 **[ACSM6:doc_id]**를 1개 이상 인용하세요. "
+        "과장된 의학적 단정은 피하고, 위험 신호 시 즉시 중단/전문가 상담을 권고합니다."
+    )
+
+    user_prompt = (
+        "### 입력 데이터\n"
+        "아래는 구조화된 설문/측정 요약(JSON)과 RAG로 찾은 ACSM6 후보입니다.\n\n"
+        f"{surveys_md}\n\n"
+        "#### ACSM6 후보\n"
+        f"{acsm_md}\n\n"
+        "### 작성 지시(섹션/형식 고정)\n"
+        "1) **안전·주의(설문 1,4 반영)**\n"
+        "   - 고위험 플래그가 있거나 PAR-Q 예(Yes) 문항이 있으면 운동 전 의학적 확인 권고 수준을 구분(권고/필수/즉시중단 기준).\n"
+        "   - 자각증상(흉통, 어지럼, 실신 느낌 등) 발생 시 즉시 중단/평가 절차.\n"
+        "   - 노쇠/프리프레일 시 초기 강도/볼륨/균형훈련/보행보조 등 세부 조정.\n"
+        "   - 워밍업/쿨다운, 약물/질환(해당 시) 고려, 통증 없는 범위 원칙. [ACSM6:doc_id]\n"
+        "2) **동기·장벽 전략(설문 2 반영)**\n"
+        "   - 사용자의 목적/선호시간·장소/사회적 지지/장벽에 맞춘 **세 가지** 행동전략(스몰 스텝, 장벽우회, 보상·습관화 등).\n"
+        "   - 일정·환경 큐(알람, 가방미리챙기기), 사회적 책무(동행/공유), 자기모니터링(주간 체크리스트) 예시.\n"
+        "   - 각 전략에 실행 체크포인트와 실패 대안 포함. [ACSM6:doc_id]\n"
+        "\n"
+        "### 출력 형식 (마크다운)\n"
+        "#### 안전·주의 요약\n"
+        "- …\n"
+        "#### 동기·장벽 맞춤 전략(3가지)\n"
+        "1) …\n"
+        "2) …\n"
+        "3) …\n"
+        "\n"
+        "※ 모든 섹션에서 적절한 곳에 [ACSM6:doc_id] 인용을 포함하고, 마지막 줄에 다음 문구를 추가하세요.\n"
+        "※ 본 조언은 일반적 정보이며, 증상 발현 시 즉시 중단하고 전문가와 상담하세요."
+    )
+
+    ans = call_openai(system_prompt, user_prompt)
+    if not ans or ans.startswith("⚠️ LLM 호출 중 오류"):
+        return ""
+    return "\n---\n### 설문 기반 ACSM6 조언(LLM)\n" + ans.strip() + "\n"

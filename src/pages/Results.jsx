@@ -81,6 +81,12 @@ export default function Results() {
   const [weeksCal, setWeeksCal] = useState(4);
   const [startDateCal, setStartDateCal] = useState(null);
 
+  // ▼ 처방 화면 표시 여부 (초기엔 false)
+  const [showRx, setShowRx] = useState(false);
+  useEffect(() => {
+    if (session?.planMd) setShowRx(true);
+  }, [session?.planMd]);
+
   const pretty = useMemo(() => JSON.stringify(payload ?? {}, null, 2), [payload]);
 
   // ───── 표시값 매핑
@@ -116,7 +122,6 @@ export default function Results() {
     abortRef.current = new AbortController();
 
     try {
-      // 🤖 처방 생성 (서버가 DB 저장까지 자동 수행)
       const { planMd, traceId } = await sendSessionSummary({
         ...payload,
         signal: abortRef.current.signal,
@@ -126,6 +131,7 @@ export default function Results() {
         setErrorMsg("서버 응답에 planMd가 없습니다.");
       } else {
         setResultFromServer({ traceId: traceId || "", planMd });
+        setShowRx(true);
       }
     } catch (err) {
       if (err.name !== "AbortError") {
@@ -143,205 +149,226 @@ export default function Results() {
     };
   }, []);
 
-  function handlePrint() {
-    window.print();
-  }
+  function handlePrint() { window.print(); }
 
-  // ✅ planMd / payload 복사
   async function copyPlanMd() {
-    try {
-      await navigator.clipboard.writeText(session?.planMd || "");
-    } catch {}
+    try { await navigator.clipboard.writeText(session?.planMd || ""); } catch {}
   }
   async function copyPayload() {
-    try {
-      await navigator.clipboard.writeText(pretty || "");
-    } catch {}
+    try { await navigator.clipboard.writeText(pretty || ""); } catch {}
   }
 
   const hasPlan = !!session?.planMd;
 
   return (
     <div style={styles.container}>
-      {/* 임시 수동입력 패널 */}
+      {/* 1) 처음엔 이거만 보임 */}
       <ManualEntryPanel />
 
-      {/* ───── 단일 ‘처방전’ 페이지 카드 ───── */}
-      <div style={styles.rxCard}>
-        {/* 헤더 */}
-        <div style={styles.rxHeader}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>운동 처방전</div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>
-              AI Fitness • {new Date().toLocaleDateString()}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {session?.readyToSend && (
-              <button
-                style={{ ...styles.primaryBtn, opacity: loading ? .6 : 1 }}
-                disabled={loading}
-                onClick={handleSend}
-                title="유사사례/ACSM 근거 기반 처방 생성"
-              >
-                {loading ? "처방 생성 중…" : "운동처방 받기"}
-              </button>
-            )}
-            <button style={styles.ghostBtn} onClick={handlePrint}>인쇄/PDF</button>
-          </div>
-        </div>
-
-        {/* 상단 요약 (프로필/측정) */}
-        <div style={styles.topGrid}>
-          {/* 프로필 */}
-          <section style={styles.panel}>
-            <div style={styles.panelTitle}>🧍 개인 프로필</div>
-            <div style={styles.profileGrid}>
-              <div>이름</div><div>{name}</div>
-              <div>성별</div><div>{sex}</div>
-              <div>나이</div><div>{age} 세</div>
-              <div>키</div><div>{height} cm</div>
-              <div>체중</div><div>{weight} kg</div>
-              <div>BMI</div>
-              <div>
-                {bmi ?? "-"}{" "}
-                <span style={{
-                  marginLeft: 8, padding: "2px 8px", borderRadius: 999,
-                  fontSize: 12, fontWeight: 700,
-                  background: `${bmiInfo.color}1a`, color: bmiInfo.color,
-                  border: `1px solid ${bmiInfo.color}55`
-                }}>
-                  {bmiInfo.label}
-                </span>
-              </div>
-            </div>
-            {!session?.readyToSend && (
-              <div style={styles.infoBox}>
-                아직 측정/설문이 완료되지 않았습니다. 완료 후 버튼이 활성화됩니다.
-              </div>
-            )}
-          </section>
-
-          {/* 측정 결과 */}
-          <section style={styles.panel}>
-            <div style={styles.panelTitle}>⚙️ 측정 결과</div>
-            <Row name="윗몸일으키기" value={situp} unit="회" score={scoreSitup} />
-            <Row name="좌전굴" value={reach} unit="cm" score={scoreReach} />
-            <Row name="스텝 회복기" value={step_bpm} unit="BPM" score={scoreStep} />
-            <Row name="추정 VO₂max" value={vo2} unit="ml/kg/min" score={scoreVo2} />
-            {session?.traceId && !loading && (
-              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
-                trace_id: {session.traceId}
-              </div>
-            )}
-          </section>
-        </div>
-
-        {/* ▼ 한 페이지 내 ‘맞춤 운동처방’ 섹션 */}
-        <section style={styles.planPanel}>
-          <div style={styles.planHeader}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={styles.planDot} />
-              <h3 style={{ margin: 0, fontSize: 18 }}>맞춤 운동처방</h3>
-            </div>
-            {/* 간단 레전드 + 복사 버튼 */}
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={styles.legendItem}><i style={{ ...styles.dot, background:"#16a34a"}} /> 우수</span>
-              <span style={styles.legendItem}><i style={{ ...styles.dot, background:"#3b82f6"}} /> 보통</span>
-              <span style={styles.legendItem}><i style={{ ...styles.dot, background:"#f59e0b"}} /> 주의</span>
-              <span style={styles.legendItem}><i style={{ ...styles.dot, background:"#ef4444"}} /> 개선필요</span>
-              {hasPlan && (
-                <button style={styles.ghostBtn} onClick={copyPlanMd} title="생성된 처방 마크다운 복사">처방 복사</button>
-              )}
-            </div>
-          </div>
-
-          {/* 마크다운 결과를 카드형 본문으로 */}
-          {errorMsg ? (
-            <div style={styles.errorBox}>
-              서버 오류: {errorMsg}
-              <button style={styles.retryBtn} onClick={handleSend} disabled={loading}>다시 시도</button>
-            </div>
-          ) : (
-            <div style={styles.planBody}>
-              {hasPlan && typeof PlanCards === "function" ? (
-                <PlanCards planMd={session.planMd} />
-              ) : hasPlan ? (
-                <div style={styles.md}><ReactMarkdown>{session.planMd}</ReactMarkdown></div>
-              ) : (
-                <div style={{ color: "#64748b", fontSize: 14 }}>
-                  아직 처방이 생성되지 않았습니다. 상단의 <b>운동처방 받기</b>를 눌러주세요.
-                </div>
-              )}
+      {/* 2) CTA: 처방받기 버튼 (처음에만 노출) */}
+      {!showRx && (
+        <div style={styles.ctaBox}>
+          <button
+            style={{
+              ...(session?.readyToSend ? styles.primaryBtnBlue : styles.primaryBtnOrange),
+              opacity: loading ? .6 : 1,
+            }}
+            disabled={!session?.readyToSend || loading}
+            onClick={handleSend}
+            title="유사사례/ACSM 근거 기반 처방 생성"
+          >
+            {loading ? "처방 생성 중…" : "운동처방 받기"}
+          </button>
+          {!session?.readyToSend && (
+            <div style={styles.infoBox}>
+              입력 완료 후 <b>전송 버튼</b>을 눌러주세요.
             </div>
           )}
+        </div>
+      )}
 
-          {/* 의사/서명 구역 느낌의 풋터 */}
-          <div style={styles.footer}>
-            <div>담당 코치: <b>AI Fitness Coach</b></div>
-            <div style={{ borderTop: "1px dashed #e2e8f0", marginTop: 8, paddingTop: 8, fontSize: 12, color: "#64748b" }}>
-              이 처방은 안내용이며 개인의 건강 상태에 따라 조정이 필요할 수 있습니다.
-            </div>
-          </div>
-        </section>
-
-        {/* ▼ 처방 기반 주간 캘린더 섹션 */}
-        {hasPlan && (
-          <section style={styles.planPanel}>
-            <div style={styles.planHeader}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={styles.planDot} />
-                <h3 style={{ margin: 0, fontSize: 18 }}>주간 계획표 (캘린더)</h3>
+      {/* 3) 처방 화면: 버튼을 누른 뒤에만 보임 */}
+      {showRx && (
+        <>
+          <div style={styles.rxCard}>
+            {/* 헤더 */}
+            <div style={styles.rxHeader}>
+              <div>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>운동 처방전</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>
+                  AI Fitness • {new Date().toLocaleDateString()}
+                </div>
               </div>
-
-              {/* 주차/시작일 컨트롤 */}
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button
-                  style={{ ...styles.ghostBtn, boxShadow: weeksCal===4 ? "inset 0 0 0 1px #cbd5e1" : "none" }}
-                  onClick={() => setWeeksCal(4)}
-                >4주</button>
-                <button
-                  style={{ ...styles.ghostBtn, boxShadow: weeksCal===6 ? "inset 0 0 0 1px #cbd5e1" : "none" }}
-                  onClick={() => setWeeksCal(6)}
-                >6주</button>
-
-                <input
-                  type="date"
-                  style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px" }}
-                  onChange={(e) => {
-                    const v = e.target.value; // yyyy-mm-dd
-                    setStartDateCal(v ? new Date(v + "T09:00:00") : null);
-                  }}
-                />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {session?.readyToSend && (
+                  <button
+                    style={{ ...styles.primaryBtn, opacity: loading ? .6 : 1 }}
+                    disabled={loading}
+                    onClick={handleSend}
+                    title="유사사례/ACSM 근거 기반 처방 재생성"
+                  >
+                    {loading ? "처방 생성 중…" : "운동처방 다시 받기"}
+                  </button>
+                )}
+                <button style={styles.ghostBtn} onClick={handlePrint}>인쇄/PDF</button>
               </div>
             </div>
 
-            <div style={{ padding: 12 }}>
-              {typeof PlanCalendar === "function" ? (
-                <PlanCalendar
-                  planMd={session.planMd}
-                  weeks={weeksCal}
-                  startDate={startDateCal || undefined}
-                />
+            {/* 상단 요약 (프로필/측정) */}
+            <div style={styles.topGrid}>
+              {/* 프로필 */}
+              <section style={styles.panel}>
+                <div style={styles.panelTitle}>🧍 개인 프로필</div>
+                <div style={styles.profileGrid}>
+                  <div>이름</div><div>{name}</div>
+                  <div>성별</div><div>{sex}</div>
+                  <div>나이</div><div>{age} 세</div>
+                  <div>키</div><div>{height} cm</div>
+                  <div>체중</div><div>{weight} kg</div>
+                  <div>BMI</div>
+                  <div>
+                    {bmi ?? "-"}{" "}
+                    <span style={{
+                      marginLeft: 8, padding: "2px 8px", borderRadius: 999,
+                      fontSize: 12, fontWeight: 700,
+                      background: `${bmiInfo.color}1a`, color: bmiInfo.color,
+                      border: `1px solid ${bmiInfo.color}55`
+                    }}>
+                      {bmiInfo.label}
+                    </span>
+                  </div>
+                </div>
+                {!session?.readyToSend && (
+                  <div style={styles.infoBox}>
+                    입력 완료 후 <b>전송 버튼</b>을 눌러주세요.
+                  </div>
+                )}
+              </section>
+
+              {/* 측정 결과 */}
+              <section style={styles.panel}>
+                <div style={styles.panelTitle}>⚙️ 측정 결과</div>
+                <Row name="윗몸일으키기" value={situp} unit="회" score={scoreSitup} />
+                <Row name="좌전굴" value={reach} unit="cm" score={scoreReach} />
+                <Row name="스텝 회복기" value={step_bpm} unit="BPM" score={scoreStep} />
+                <Row name="추정 VO₂max" value={vo2} unit="ml/kg/min" score={scoreVo2} />
+                {session?.traceId && !loading && (
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
+                    trace_id: {session.traceId}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* ▼ 맞춤 운동처방 섹션 */}
+            <section style={styles.planPanel}>
+              <div style={styles.planHeader}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={styles.planDot} />
+                  <h3 style={{ margin: 0, fontSize: 18 }}>맞춤 운동처방</h3>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={styles.legendItem}><i style={{ ...styles.dot, background:"#16a34a"}} /> 우수</span>
+                  <span style={styles.legendItem}><i style={{ ...styles.dot, background:"#3b82f6"}} /> 보통</span>
+                  <span style={styles.legendItem}><i style={{ ...styles.dot, background:"#f59e0b"}} /> 주의</span>
+                  <span style={styles.legendItem}><i style={{ ...styles.dot, background:"#ef4444"}} /> 개선필요</span>
+                  {hasPlan && (
+                    <button style={styles.ghostBtn} onClick={copyPlanMd} title="생성된 처방 마크다운 복사">처방 복사</button>
+                  )}
+                </div>
+              </div>
+
+              {errorMsg ? (
+                <div style={styles.errorBox}>
+                  서버 오류: {errorMsg}
+                  <button style={styles.retryBtn} onClick={handleSend} disabled={loading}>다시 시도</button>
+                </div>
               ) : (
-                <div style={{ color: "#64748b", fontSize: 14 }}>
-                  PlanCalendar 컴포넌트를 사용할 수 없습니다.
+                <div style={styles.planBody}>
+                  {hasPlan ? (
+                    <>
+                      {typeof PlanCards === "function" ? <PlanCards planMd={session.planMd} /> : null}
+                      <details style={styles.rawSection}>
+                        <summary style={styles.rawSummary}>원문 전체 보기 (카드 + ACSM6 조언)</summary>
+                        <div style={styles.md}>
+                          <ReactMarkdown>{session.planMd}</ReactMarkdown>
+                        </div>
+                      </details>
+                    </>
+                  ) : (
+                    <div style={{ color: "#64748b", fontSize: 14 }}>
+                      아직 처방이 생성되지 않았습니다. 상단의 <b>운동처방 받기</b>를 눌러주세요.
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          </section>
-        )}
-      </div>
 
-      {/* 필요시 디버그/원본 페이로드 박스 */}
-      <div style={styles.debugCard}>
-        <h4 style={{ margin: "0 0 8px" }}>기록 요약 (서버로 보낼 내용)</h4>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-          <button style={styles.ghostBtn} onClick={copyPayload}>payload 복사</button>
-          {hasPlan && <button style={styles.ghostBtn} onClick={copyPlanMd}>planMd 복사</button>}
-        </div>
-        <pre style={styles.jsonBox}>{pretty}</pre>
-      </div>
+              <div style={styles.footer}>
+                <div>담당 코치: <b>AI Fitness Coach</b></div>
+                <div style={{ borderTop: "1px dashed #e2e8f0", marginTop: 8, paddingTop: 8, fontSize: 12, color: "#64748b" }}>
+                  이 처방은 안내용이며 개인의 건강 상태에 따라 조정이 필요할 수 있습니다.
+                </div>
+              </div>
+            </section>
+
+            {/* ▼ 캘린더 섹션 */}
+            {hasPlan && (
+              <section style={styles.planPanel}>
+                <div style={styles.planHeader}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={styles.planDot} />
+                    <h3 style={{ margin: 0, fontSize: 18 }}>주간 계획표 (캘린더)</h3>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button
+                      style={{ ...styles.ghostBtn, boxShadow: weeksCal===4 ? "inset 0 0 0 1px #cbd5e1" : "none" }}
+                      onClick={() => setWeeksCal(4)}
+                    >4주</button>
+                    <button
+                      style={{ ...styles.ghostBtn, boxShadow: weeksCal===6 ? "inset 0 0 0 1px #cbd5e1" : "none" }}
+                      onClick={() => setWeeksCal(6)}
+                    >6주</button>
+
+                    <input
+                      type="date"
+                      style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px" }}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setStartDateCal(v ? new Date(v + "T09:00:00") : null);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ padding: 12 }}>
+                  {typeof PlanCalendar === "function" ? (
+                    <PlanCalendar
+                      planMd={session.planMd}
+                      weeks={weeksCal}
+                      startDate={startDateCal || undefined}
+                    />
+                  ) : (
+                    <div style={{ color: "#64748b", fontSize: 14 }}>
+                      PlanCalendar 컴포넌트를 사용할 수 없습니다.
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+          </div>
+
+          {/* 디버그/원본 페이로드 박스 */}
+          <div style={styles.debugCard}>
+            <h4 style={{ margin: "0 0 8px" }}>기록 요약 (서버로 보낼 내용)</h4>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+              <button style={styles.ghostBtn} onClick={copyPayload}>payload 복사</button>
+              {hasPlan && <button style={styles.ghostBtn} onClick={copyPlanMd}>planMd 복사</button>}
+            </div>
+            <pre style={styles.jsonBox}>{pretty}</pre>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -355,6 +382,12 @@ const styles = {
     fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif",
     color: "#0f172a",
   },
+  ctaBox: {
+    marginTop: 12,
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+  },
   rxCard: {
     background: "#ffffff",
     borderRadius: 16,
@@ -367,11 +400,31 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "space-between",
     paddingBottom: 10, borderBottom: "1px solid rgba(15,23,42,.06)", marginBottom: 10,
   },
+  // 상단 재생성 버튼(항상 파랑)
   primaryBtn: {
     padding: "10px 14px",
     borderRadius: 10,
     border: "1px solid #0b5cab",
     background: "#0b5cab",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 14,
+  },
+  // CTA 전용: 활성/비활성 색 분리
+  primaryBtnBlue: {
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: "1px solid #0b5cab",
+    background: "#0b5cab",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 14,
+  },
+  primaryBtnOrange: {
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: "1px solid #f97316",
+    background: "#f97316", // 다홍/오렌지
     color: "#fff",
     fontWeight: 800,
     fontSize: 14,
@@ -434,6 +487,18 @@ const styles = {
   legendItem: { fontSize: 12, color: "#475569", display: "flex", alignItems: "center", gap: 6 },
   dot: { display: "inline-block", width: 10, height: 10, borderRadius: 999 },
   planBody: { padding: 16 },
+  rawSection: {
+    marginTop: 16,
+    borderTop: "1px solid rgba(15,23,42,.08)",
+    paddingTop: 12,
+  },
+  rawSummary: {
+    cursor: "pointer",
+    fontWeight: 800,
+    fontSize: 14,
+    color: "#0b5cab",
+    marginBottom: 8,
+  },
   md: {
     lineHeight: 1.6,
     fontSize: 15,

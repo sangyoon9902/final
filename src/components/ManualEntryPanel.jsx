@@ -61,7 +61,7 @@ export default function ManualEntryPanel() {
 
   return (
     <div style={styles.card}>
-      <h3 style={styles.title}>수동 입력 (프로필 · 측정값)</h3>
+      <h3 style={styles.title}> 최종 입력(프로필 · 측정값)</h3>
 
       <div style={styles.grid}>
         {/* 프로필 */}
@@ -169,9 +169,6 @@ export default function ManualEntryPanel() {
       </div>
 
       <div style={styles.actions}>
-        <button style={styles.secondaryBtn} onClick={applyToContext}>
-          값 적용
-        </button>
 
         <button
           style={styles.primaryBtn}
@@ -180,14 +177,14 @@ export default function ManualEntryPanel() {
             markSessionReady(); // 전송 준비 완료 → Results에서 버튼 활성화
           }}
         >
-          모든 입력 완료(전송 준비)
+          정보 입력 완료
         </button>
       </div>
 
       {session?.readyToSend ? (
         <div style={styles.readyMsg}>✅ 전송 준비 완료 — 이제 “운동처방 받기” 버튼을 눌러주세요.</div>
       ) : (
-        <div style={styles.hint}>입력 후 “모든 입력 완료(전송 준비)”를 누르면 Results에서 전송 버튼이 켜집니다.</div>
+        <div style={styles.hint}>수정하실 부분이 없으면 "정보 입력 완료" 버튼을 눌러주세요. “정보 입력 완료”버튼을 누르시면 운동처방 받기 버튼이 활성화됩니다.</div>
       )}
     </div>
   );
@@ -225,9 +222,9 @@ const styles = {
   },
   actions: { display: "flex", gap: 10, marginTop: 12 },
   primaryBtn: {
-    padding: "10px 14px",
+    padding: "10px 25px",
     borderRadius: 10,
-    border: "1px solid #0b5cab",
+    border: "5px solid #0b5cab",
     background: "#0b5cab",
     color: "#fff",
     fontWeight: 700,

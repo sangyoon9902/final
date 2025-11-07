@@ -76,7 +76,7 @@ export default function Survey1() {
     navigate("/survey2");
   };
 
-  // 스타일 (그대로 유지)
+  // 스타일
   const wrap = { maxWidth: 980, margin: "40px auto", padding: "0 16px" };
   const card = {
     border: "1px solid #c9d4ff",
@@ -106,6 +106,19 @@ export default function Survey1() {
     padding: "10px 12px",
     borderRadius: 10,
     fontSize: 14,
+  };
+
+  // 👇 [수정됨] 버튼 공통 스타일
+  const baseButtonStyle = {
+    flex: 1, // 버튼이 공간을 균등하게 차지
+    padding: "16px", // 버튼 크기 (높이) 키움
+    borderRadius: 10,
+    border: 0,
+    color: "#fff",
+    fontSize: "16px", // 폰트 크기 키움
+    fontWeight: 700, // 폰트 굵게
+    cursor: "pointer",
+    textAlign: "center",
   };
 
   return (
@@ -161,15 +174,22 @@ export default function Survey1() {
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
+      {/* 👇 [수정됨] 버튼 컨테이너 스타일 */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center", // 중앙 정렬
+          gap: "16px", // 버튼 사이 간격
+          marginTop: "24px", // 위쪽 여백
+          marginBottom: "12px", // 아래쪽 여백
+        }}
+      >
         <button
           type="button"
           onClick={handlePrev}
           style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
+            ...baseButtonStyle,
+            background: "#45474B", // 이미지와 유사한 어두운 회색
           }}
         >
           이전
@@ -179,19 +199,27 @@ export default function Survey1() {
           type="button"
           onClick={handleNext}
           style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: 0,
-            background: "#2f5aff",
-            color: "#fff",
+            ...baseButtonStyle,
+            background: "#2B2D42", // 이미지와 유사한 어두운 남색
+            // (선택) 모든 문항에 답하지 않았을 때 버튼을 흐리게 처리
+            opacity: allAnswered ? 1 : 0.7,
           }}
         >
           다음
         </button>
       </div>
 
-      <p style={{ marginTop: 10, color: "#6b7280", fontSize: 13 }}>
-        ※ 각 문항에 대해 ‘예’ 또는 ‘아니오’를 선택해주세요. 1개 이상 ‘예’인 경우에는 전문가 상담 후 진행하세요.
+      {/* 👇 [수정됨] 안내 문구도 중앙 정렬 */}
+      <p
+        style={{
+          marginTop: 10,
+          color: "#6b7280",
+          fontSize: 13,
+          textAlign: "center",
+        }}
+      >
+        ※ 각 문항에 대해 ‘예’ 또는 ‘아니오’를 선택해주세요. 1개 이상 ‘예’인 경우에는
+        전문가 상담 후 진행하세요.
       </p>
     </div>
   );

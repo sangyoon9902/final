@@ -1,4 +1,5 @@
 // src/pages/Survey3.jsx
+
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../state/AppState"; // ✅ 추가
@@ -6,8 +7,8 @@ import { useApp } from "../state/AppState"; // ✅ 추가
 /**
  * Survey3 – 국제신체활동설문지(IPAQ) 요약형 (3/4)
  * 저장:
- *   1) localStorage("survey").survey3 로 저장
- *   2) AppProvider.surveys.survey3 로 저장
+ * 1) localStorage("survey").survey3 로 저장
+ * 2) AppProvider.surveys.survey3 로 저장
  *
  * 이동: 이전 → /survey2, 다음 → /survey4
  */
@@ -72,6 +73,22 @@ export default function Survey3() {
     // 걷기
     if (!walkNone && (walkDays <= 0 || walkHour + walkMin === 0)) return false;
 
+    // 고강도, 중강도, 걷기 중 하나는 입력되어야 함 (모두 '안한다'인 경우는 괜찮음)
+    if (vigNone && modNone && walkNone) {
+      // 모두 '안한다'면 유효함
+    } else {
+      // '안한다'가 아닌 항목 중 하나라도 유효한 값이 있어야 함
+      let validActivity = false;
+      if (!vigNone && vigDays > 0 && vigHour + vigMin > 0) validActivity = true;
+      if (!modNone && modDays > 0 && modHour + modMin > 0) validActivity = true;
+      if (!walkNone && walkDays > 0 && walkHour + walkMin > 0) validActivity = true;
+
+      // '안한다' 체크 안 한 항목이 있는데 값이 유효하지 않으면 false
+      if (!vigNone && (vigDays <= 0 || vigHour + vigMin === 0)) return false;
+      if (!modNone && (modDays <= 0 || modHour + modMin === 0)) return false;
+      if (!walkNone && (walkDays <= 0 || walkHour + walkMin === 0)) return false;
+    }
+
     return true;
   }, [
     jobType,
@@ -119,7 +136,16 @@ export default function Survey3() {
   // 공용 컴포넌트들
   const Error = ({ show, children }) =>
     show ? (
-      <div style={{ color: "#d33", fontSize: 13, marginTop: 6 }}>{children}</div>
+      <div
+        style={{
+          color: "#d33",
+          fontSize: 13,
+          marginTop: 6,
+          padding: "0 18px", // Error 메시지도 padding 적용
+        }}
+      >
+        {children}
+      </div>
     ) : null;
 
   const TimePicker = ({ hour, setHour, min, setMin, disabled }) => (
@@ -160,6 +186,7 @@ export default function Survey3() {
           display: "grid",
           gridTemplateColumns: "60px 1fr 1fr",
           gap: 16,
+          alignItems: "center", // 세로 중앙 정렬
         }}
       >
         <div style={{ fontWeight: 700 }}>{no}</div>
@@ -211,6 +238,19 @@ export default function Survey3() {
 
     // 3) 다음 페이지로 이동
     navigate("/survey4");
+  };
+
+  // 👇 [추가됨] 버튼 공통 스타일
+  const baseButtonStyle = {
+    flex: 1, // 버튼이 공간을 균등하게 차지
+    padding: "16px", // 버튼 크기 (높이) 키움
+    borderRadius: 10,
+    border: 0,
+    color: "#fff",
+    fontSize: "16px", // 폰트 크기 키움
+    fontWeight: 700, // 폰트 굵게
+    cursor: "pointer",
+    textAlign: "center",
   };
 
   return (
@@ -486,7 +526,7 @@ export default function Survey3() {
         {/* 5) 앉아있던 시간 */}
         <Row
           no="5"
-          title="지난 7일간, 주중에 앉아서 보낸 시간이 보통 얼마나 됩니까?"
+          title="지난 7일간, 주중에 앉아서 보낸 시간이 보통 얼마나 됩니까? (필수 아님)"
           right={
             <TimePicker
               hour={sitHour}
@@ -501,34 +541,34 @@ export default function Survey3() {
         {/* 6) 운동 장소 */}
         <Row
           no="6"
-          title="주로 운동하는 장소는 어디입니까?"
+          title="주로 운동하는 장소는 어디입니까? (필수 아님)"
           right={
             <input
               value={place}
               onChange={(e) => setPlace(e.target.value)}
-              placeholder="예: 공원, 헬스장, 학교 체육관 등"
+              placeholder="예: 공원, K-Pop 헬스장, 학교 체육관 등"
               style={{ ...selStyle, width: "100%" }}
             />
           }
         />
       </div>
 
-      {/* 하단 버튼 */}
+      {/* 👇 [수정됨] 하단 버튼 컨테이너 */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          marginTop: 16,
+          justifyContent: "center", // 중앙 정렬
+          gap: "16px", // 버튼 사이 간격
+          marginTop: "24px", // 위쪽 여백
+          marginBottom: "12px", // 아래쪽 여백
         }}
       >
         <button
           type="button"
           onClick={() => navigate("/survey2")}
           style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
+            ...baseButtonStyle,
+            background: "#45474B", // 어두운 회색
           }}
         >
           이전
@@ -537,21 +577,27 @@ export default function Survey3() {
         <button
           type="button"
           onClick={handleNext}
-          disabled={!isValid && touched}
+          disabled={!isValid && touched} // disabled 상태는 유지
           style={{
-            padding: "10px 16px",
-            borderRadius: 10,
-            border: 0,
-            background: "#2f5aff",
-            color: "#fff",
-            opacity: isValid ? 1 : 0.95,
+            ...baseButtonStyle,
+            background: "#2B2D42", // 어두운 남색
+            // 유효하지 않을 때 투명도 조절
+            opacity: !isValid && touched ? 0.7 : 1,
           }}
         >
           다음
         </button>
       </div>
 
-      <p style={{ marginTop: 10, color: "#6b7280", fontSize: 13 }}>
+      {/* 👇 [수정됨] 안내 문구 중앙 정렬 */}
+      <p
+        style={{
+          marginTop: 10,
+          color: "#6b7280",
+          fontSize: 13,
+          textAlign: "center",
+        }}
+      >
         ※ 각 항목은 지난 7일 기준으로 응답해주세요. ‘안한다’를 선택하면 해당 항목의
         일수/시간 입력은 비활성화됩니다.
       </p>
