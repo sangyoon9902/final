@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../state/AppState";
 import { sendSessionSummary } from "../api/session";
 import { useBuildSessionPayload } from "../api/buildSessionPayload";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown from "react-markdown"; // [참고] ReactMarkdown은 이제 사용되지 않습니다.
 import ManualEntryPanel from "../components/ManualEntryPanel";
 import PlanCalendar from "../components/PlanCalendar.jsx";
 import PlanCards from "../components/PlanCards.jsx";
@@ -87,7 +87,8 @@ export default function Results() {
     if (session?.planMd) setShowRx(true); // 기존 planMd 있으면 자동 표시
   }, [session?.planMd]);
 
-  const pretty = useMemo(() => JSON.stringify(payload ?? {}, null, 2), [payload]);
+  // [제거] 'pretty' 변수 (JSON 표시에 사용되었음)
+  // const pretty = useMemo(() => JSON.stringify(payload ?? {}, null, 2), [payload]);
 
   // ───── 표시값 매핑
   const user = payload?.user ?? {};
@@ -154,24 +155,22 @@ export default function Results() {
   async function copyPlanMd() {
     try { await navigator.clipboard.writeText(session?.planMd || ""); } catch {}
   }
-  async function copyPayload() {
-    try { await navigator.clipboard.writeText(pretty || ""); } catch {}
-  }
+  
+  // [제거] copyPayload 함수
+  // async function copyPayload() { ... }
 
   const hasPlan = !!session?.planMd;
 
   return (
     <div style={styles.container}>
-      {/* ManualEntryPanel(카드)와 ctaRow(버튼)를 
-        position: relative 래퍼로 감싸서 버튼을 카드 우하단에 배치합니다.
-      */}
-      <div style={{ position: "relative" }}>
-        
-        {/* 1) 처음엔 이거만 보임 (흰색 카드) */}
-        <ManualEntryPanel />
+      {/* [수정] !showRx (처방전이 보이지 않을 때)일 때만 ManualEntryPanel 래퍼를 렌더링합니다. */}
+      {!showRx && (
+        <div style={{ position: "relative" }}>
+          
+          {/* 1) 처음엔 이거만 보임 (흰색 카드) */}
+          <ManualEntryPanel />
 
-        {/* 2) CTA: 처방받기 버튼 (처음에만 노출) */}
-        {!showRx && (
+          {/* 2) CTA: 처방받기 버튼 (처음에만 노출) */}
           <div style={styles.ctaRow}> 
             <button
               style={{
@@ -186,8 +185,8 @@ export default function Results() {
               {loading ? "처방 생성 중…" : "운동처방 받기"}
             </button>
           </div>
-        )}
-      </div> {/* 래퍼 div 종료 */}
+        </div> /* 래퍼 div 종료 */
+      )}
 
 
       {/* 3) 처방 화면: 버튼을 누른 뒤에만 보임 */}
@@ -203,8 +202,6 @@ export default function Results() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                {/* [수정] '운동처방 다시 받기' 버튼을 제거했습니다.
-                */}
                 <button style={styles.ghostBtn} onClick={handlePrint}>인쇄/PDF</button>
               </div>
             </div>
@@ -278,12 +275,9 @@ export default function Results() {
                   {hasPlan ? (
                     <>
                       {typeof PlanCards === "function" ? <PlanCards planMd={session.planMd} /> : null}
-                      <details style={styles.rawSection}>
-                        <summary style={styles.rawSummary}>원문 전체 보기 (카드 + ACSM6 조언)</summary>
-                        <div style={styles.md}>
-                          <ReactMarkdown>{session.planMd}</ReactMarkdown>
-                        </div>
-                      </details>
+                      
+                      {/* [제거] '원문 전체 보기' <details> 블록 삭제 */}
+                      
                     </>
                   ) : (
                     <div style={{ color: "#64748b", fontSize: 14 }}>
@@ -348,15 +342,8 @@ export default function Results() {
             )}
           </div>
 
-          {/* 디버그/원본 페이로드 박스 */}
-          <div style={styles.debugCard}>
-            <h4 style={{ margin: "0 0 8px" }}>기록 요약 (서버로 보낼 내용)</h4>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-              <button style={styles.ghostBtn} onClick={copyPayload}>payload 복사</button>
-              {hasPlan && <button style={styles.ghostBtn} onClick={copyPlanMd}>planMd 복사</button>}
-            </div>
-            <pre style={styles.jsonBox}>{pretty}</pre>
-          </div>
+          {/* [제거] 디버그/원본 페이로드 박스 (debugCard) 삭제 */}
+          
         </>
       )}
     </div>
@@ -507,22 +494,6 @@ const styles = {
   legendItem: { fontSize: 12, color: "#475569", display: "flex", alignItems: "center", gap: 6 },
   dot: { display: "inline-block", width: 10, height: 10, borderRadius: 999 },
   planBody: { padding: 16 },
-  rawSection: {
-    marginTop: 16,
-    borderTop: "1px solid rgba(15,23,42,.08)",
-    paddingTop: 12,
-  },
-  rawSummary: {
-    cursor: "pointer",
-    fontWeight: 800,
-    fontSize: 14,
-    color: "#0b5cab",
-    marginBottom: 8,
-  },
-  md: {
-    lineHeight: 1.6,
-    fontSize: 15,
-  },
   footer: { padding: "0 16px 14px" },
   errorBox: {
     background: "#ffe5e5",
@@ -542,20 +513,5 @@ const styles = {
     background: "#fff",
     cursor: "pointer",
   },
-  debugCard: {
-    background: "#fafafa",
-    borderRadius: 12,
-    border: "1px solid rgba(15,23,42,.06)",
-    padding: 16,
-  },
-  jsonBox: {
-    background: "#fff",
-    borderRadius: 8,
-    border: "1px solid rgba(2,6,23,.08)",
-    padding: 12,
-    fontSize: 12,
-    lineHeight: 1.45,
-    maxHeight: 260,
-    overflowY: "auto",
-  },
+  // [제거] rawSection, rawSummary, md, debugCard, jsonBox 스타일
 };

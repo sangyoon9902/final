@@ -2,12 +2,8 @@
 import React, { useMemo, useState } from "react";
 
 /* =========================================================
- * PlanCalendar (v3, 카드형 처방 텍스트 전용)
- * - 입력: "종목\n<값>\n빈도(F)\n<값>\n강도(I)\n<값> ..." 식의 카드 3장(유산소/근력/유연성)
- * - 달력: 유산소=월·수·금 / 근력=화·목 / 유연성=평일 분배(빈도만큼)
- * - 셀: 종목명만 칩에 표시
- * - 클릭: 라벨+값 카드(🎬/CSV 포함) 모달로 표시
- * - ICS: 종목명/시간/강도/빈도 등 포함
+ * PlanCalendar (v3.1, 카드형 처방 텍스트 전용)
+ * - v3에서 모달창의 🎬/CSV 알약만 제거 (대표영상 보기 링크는 유지)
  * ========================================================= */
 
 /* ───────── 공통 파서 (PlanCards v3와 동일 규칙) ───────── */
@@ -302,6 +298,7 @@ export default function PlanCalendar({
   const base = useMemo(() => startOfWeek(startDate || new Date(), 1), [startDate]);
 
   // 4) 주차×요일 이벤트 구성
+  // [수정] ()T => ... 를 () => ... 로 수정
   const weeksData = useMemo(() => {
     const out = [];
     for (let w = 0; w < weeks; w++) {
@@ -343,9 +340,9 @@ export default function PlanCalendar({
               e.sets ? `세트/반복/휴식: ${e.sets}` : "",
               e.caut ? `주의/대안: ${e.caut}` : "",
               e.rule ? `진행규칙·주의: ${e.rule}` : "",
-              e.yt?.title ? `🎬 ${e.yt.title}` : "",
-              e.yt?.url ? `URL: ${e.yt.url}` : "",
-              e.evid?.csv ? `CSV:${e.evid.csv}` : "",
+              e.yt?.title ? `🎬 ${e.yt.title}` : "", // .ics 파일에는 정보 유지
+              e.yt?.url ? `URL: ${e.yt.url}` : "",     // .ics 파일에는 정보 유지
+              e.evid?.csv ? `CSV:${e.evid.csv}` : "", // .ics 파일에는 정보 유지
             ].filter(Boolean).join("\n"),
           });
         }
@@ -457,10 +454,12 @@ export default function PlanCalendar({
             <KV label="주의/대안" value={selected.card.caut} />
             <KV label="진행규칙·주의" value={selected.card.rule} />
 
-            {/* 🎬 / CSV */}
+            {/* [수정] 🎬 / CSV 알약 제거 */}
             <div style={S.pillWrap}>
+              {/*
               {selected.card.yt?.title && <span style={S.pillTag}>🎬 {selected.card.yt.title}</span>}
               {selected.card.evid?.csv && <span style={S.pillTag}>CSV:{selected.card.evid.csv}</span>}
+              */}
               {selected.card.yt?.url && (
                 <a
                   href={selected.card.yt.url}

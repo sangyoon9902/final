@@ -9,12 +9,173 @@ import { IDX, VIS_TH, SIT_SIDE_MIN } from "../utils/poseIdx";
 import { angleDeg } from "../utils/math";
 import { useApp } from "../state/AppState"; // ✅ 전역 세션 저장을 위해 추가
 
+/* ───────────────────────── GuideCard (우측 상단) ───────────────────────── */
+function GuideCard({ onClose }) {
+  return (
+    <aside style={gStyles.wrap} role="complementary" aria-label="윗몸일으키기 준비자세 가이드">
+      <div style={gStyles.card}>
+        <div style={gStyles.header}>
+          <span style={gStyles.pill}>Guide</span>
+          <button onClick={onClose} aria-label="가이드 닫기" style={gStyles.close}>×</button>
+        </div>
+
+        <div style={gStyles.title}>
+          다음 그림처럼 <b style={{ color: "#7cc7ff" }}>카메라 각도 75°</b>로
+          <br /> <b style={{ color: "#7cc7ff" }}>준비자세</b>를 취해주세요.
+        </div>
+
+        <div style={gStyles.imgWrap}>
+          <img
+            src="/situp.png"
+            alt="윗몸일으키기 준비자세 예시 (카메라 75°)"
+            style={gStyles.img}
+            draggable={false}
+          />
+          <div style={gStyles.angleBadge}>75°</div>
+          <div style={gStyles.caption}>준비자세 예시</div>
+        </div>
+
+        {/* ★ 추가된 관절 안내 박스 */}
+        <div style={gStyles.jointBox} aria-label="인식 필수 관절 안내">
+          <div style={gStyles.jointTitle}>카메라에 꼭 보여야 하는 부위</div>
+          <div style={gStyles.chipGrid}>
+            <span style={gStyles.chip}>어깨</span>
+            <span style={gStyles.chip}>팔꿈치</span>
+            <span style={gStyles.chip}>손목</span>
+            <span style={gStyles.chip}>엉덩이(골반)</span>
+            <span style={gStyles.chip}>무릎</span>
+            <span style={gStyles.chip}>발목</span>
+          </div>
+          <p style={gStyles.jointHint}>
+            <b>한쪽(왼쪽 또는 오른쪽)</b>의 위 6개 부위가 <b>화면 안</b>에 <b>또렷하게</b> 보여야
+            정확하게 인식돼요. 몸의 <b>측면 프레이밍(약 75°)</b>을 유지하고,
+            <b>무릎 각도는 약 90°</b>, <b>발바닥은 바닥에 고정</b>되게 촬영해주세요.
+          </p>
+        </div>
+
+        <ul style={gStyles.list}>
+
+        </ul>
+      </div>
+    </aside>
+  );
+}
+
+/* ───────────────────────── Metric (세로형 HUD 아이템) ───────────────────────── */
+function Dot({ color="#22c55e" }) {
+  return (
+    <span style={{
+      display:"inline-block",
+      width: 16, height: 16, borderRadius: 9999,
+      background: color,
+      boxShadow: `0 0 0 3px ${color}22, inset 0 0 6px rgba(0,0,0,.25)`
+    }} />
+  );
+}
+function Metric({ label, value, dot }) {
+  return (
+    <div style={{
+      display:"grid",
+      gridTemplateColumns: "1fr auto",
+      alignItems:"center",
+      gap: 10,
+      padding: "10px 12px",
+      background: "rgba(0,0,0,.35)",
+      border: "1px solid rgba(255,255,255,.08)",
+      borderRadius: 14
+    }}>
+      <div style={{ display:"flex", alignItems:"center", gap: 10 }}>
+        {dot ? <Dot color={dot} /> : <span style={{ width:16 }} />}
+        <div style={{ fontSize: 14, color:"#cbd5e1", fontWeight:700 }}>{label}</div>
+      </div>
+      <div style={{
+        fontSize: 30,
+        lineHeight: 1,
+        fontWeight: 900,
+        color: "#ffffff",
+        textShadow: "0 2px 10px rgba(0,0,0,.35)"
+      }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+/* ★ 관절 인식 신호등 색상(0~2=빨강, 3~5=노랑, 6=초록) */
+function jointDotColor(n) {
+  if (n >= 6) return "#22c55e";   // green
+  if (n >= 3) return "#f59e0b";   // amber
+  return "#ef4444";               // red
+}
+
+/* ───────────────────────── Top-left Controls (새 버튼 바) ───────────────────────── */
+function TopLeftControls({ onBack, onToggleFull, isFullscreen }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 12,
+        left: 12,
+        zIndex: 7,
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        background: "rgba(0,0,0,0.42)",
+        border: "1px solid rgba(255,255,255,0.14)",
+        backdropFilter: "blur(8px)",
+        borderRadius: 16,
+        padding: "8px 10px",
+        boxShadow: "0 10px 28px rgba(0,0,0,.35)",
+      }}
+    >
+      <CtlButton onClick={onBack} ariaLabel="종목 선택으로">종목 선택으로</CtlButton>
+      <CtlButton onClick={onToggleFull} ariaLabel="전체화면 전환">
+        {isFullscreen ? "전체화면 해제" : "전체화면"}
+      </CtlButton>
+    </div>
+  );
+}
+
+function CtlButton({ onClick, children, ariaLabel }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={ariaLabel}
+      style={{
+        appearance: "none",
+        border: "1px solid rgba(255,255,255,0.18)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.06) 100%)",
+        color: "#fff",
+        padding: "10px 16px",
+        borderRadius: 12,
+        fontWeight: 800,
+        letterSpacing: "-0.2px",
+        // 화면 비율에 맞춘 자동 폰트/패딩
+        fontSize: "clamp(14px, 1.6vw, 18px)",
+        lineHeight: 1.15,
+        cursor: "pointer",
+        boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06), 0 6px 18px rgba(0,0,0,.35)",
+        transition: "transform .08s ease, background .2s ease",
+      }}
+      onMouseDown={(e) => (e.currentTarget.style.transform = "translateY(1px)")}
+      onMouseUp={(e) => (e.currentTarget.style.transform = "translateY(0)")}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function MeasureSitUp() {
   const nav = useNavigate();
-  const { setSession } = useApp(); // ✅ 추가: 완료 결과를 전역으로 저장
+  const { setSession } = useApp(); // ✅ 완료 결과를 전역으로 저장
 
   // 카메라/포즈
   const { videoRef, canvasRef, landmarks, fps, error } = usePoseCamera({ enable: true });
+
+  // 전체화면용 래퍼 ref
+  const wrapRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 상태
   const [phase, setPhase] = useState("guide"); // guide→countdown→running→finished
@@ -24,7 +185,7 @@ export default function MeasureSitUp() {
   const [yawDeg, setYawDeg] = useState(NaN);
   const [angleOK, setAngleOK] = useState(false);
   const [sideCount, setSideCount] = useState(0);
-  const [bodyAngle, setBodyAngle] = useState(NaN); // 화면에 띄울 "몸각도"
+  const [bodyAngle, setBodyAngle] = useState(NaN);
   const [hudStatus, setHudStatus] = useState("대기");
   const [reps, setReps] = useState(0);
   const repsRef = useRef(0);
@@ -42,6 +203,9 @@ export default function MeasureSitUp() {
     situpAudioRef.current = el;
     return () => { try { el.pause(); } catch {} };
   }, []);
+
+  // ★ 가이드 카드 표시 여부
+  const [showGuide, setShowGuide] = useState(true);
 
   // ── 내부 유틸: 측면 가시성 점수 & 엉덩이 각도 계산
   function sideVisibilityCount(lms, side /* "L" | "R" */) {
@@ -63,7 +227,7 @@ export default function MeasureSitUp() {
     const KNEE = side === "L" ? lms[IDX.L_KNEE] : lms[IDX.R_KNEE];
     if (!SH || !HIP || !KNEE) return NaN;
     return angleDeg(SH, HIP, KNEE); // 어깨-엉덩이-무릎
-  }
+    }
 
   // 미디어파이프 관절 & 뼈대 그리기
   function drawSkeleton(ctx, lms) {
@@ -178,7 +342,7 @@ export default function MeasureSitUp() {
     return () => clearInterval(timer);
   }, [phase]);
 
-  // reps 증가시 4초 종료 타이머 (추가 증가 없으면 종료)
+  // reps 증가시 4초 종료 타이머
   useEffect(() => {
     if (phase !== "running") return;
     if (reps <= 0) return;
@@ -195,7 +359,6 @@ export default function MeasureSitUp() {
           situp: {
             ...s.situp,
             reps: repsRef.current,
-            // maxTorsoDeg 등을 따로 추적했다면 여기서 같이 저장
           },
         }));
       }
@@ -224,32 +387,13 @@ export default function MeasureSitUp() {
     };
   }, []);
 
-  function handleReset() {
-    resetSitupCounterByBodyAngle();
-    setPhase("guide");
-    setCountdown(5);
-    setYawDeg(NaN);
-    setAngleOK(false);
-    setSideCount(0);
-    setBodyAngle(NaN);
-    setHudStatus("대기");
-    setReps(0);
-    if (repFinishTimerRef.current) clearTimeout(repFinishTimerRef.current);
-    try {
-      if (situpAudioRef.current) {
-        situpAudioRef.current.pause();
-        situpAudioRef.current.currentTime = 0;
-      }
-    } catch {}
-  }
-
-  // ✅ “종목 선택으로” 눌렀을 때도 마지막 스냅샷 저장 + 선택창 알림
+  // ✅ 뒤로가기 (스냅샷 저장 후 선택화면 이동)
   function handleBackToSelect() {
     setSession((s) => ({
       ...s,
       situp: {
         ...s.situp,
-        reps: Math.max(s?.situp?.reps ?? 0, repsRef.current), // 기존값보다 큰 경우만 갱신
+        reps: Math.max(s?.situp?.reps ?? 0, repsRef.current),
       },
     }));
     nav("/select", {
@@ -260,6 +404,21 @@ export default function MeasureSitUp() {
         },
       },
     });
+  }
+
+  // ✅ 전체화면 토글
+  async function toggleFullscreen() {
+    const el = wrapRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) {
+        await el.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch {}
   }
 
   return (
@@ -288,7 +447,14 @@ export default function MeasureSitUp() {
       </div>
 
       {/* 카메라 + 오버레이들 */}
-      <div style={{ position:"relative" }}>
+      <div style={{ position:"relative" }} ref={wrapRef}>
+        {/* ★ 왼쪽 상단 컨트롤바 */}
+        <TopLeftControls
+          onBack={handleBackToSelect}
+          onToggleFull={toggleFullscreen}
+          isFullscreen={isFullscreen}
+        />
+
         <video
           ref={videoRef}
           playsInline
@@ -312,42 +478,49 @@ export default function MeasureSitUp() {
           }}
         />
 
-        {/* 좌측-하단 오버레이 (HUD + 버튼) */}
+        {/* ★ 우측 상단 가이드 카드 */}
+        {showGuide && (
+          <div style={{ position:"absolute", right:12, top:12, zIndex:5 }}>
+            <GuideCard onClose={() => setShowGuide(false)} />
+          </div>
+        )}
+
+        {/* 좌측-하단 HUD (버튼 블록은 제거됨) */}
         <div style={{
           position:"absolute",
-          left:12,
-          bottom:12,
+          left: 12,
+          top: "50%",
+          transform: "translateY(-45%)", // 중앙에서 약간 위로
           display:"flex",
           flexDirection:"column",
-          gap: 12 // ✅ 수정됨 (10 → 12)
+          gap: 12
         }}>
-          {/* HUD */}
           <div style={{
             display:"flex",
-            gap: 12, // ✅ 수정됨 (10 → 12)
-            flexWrap:"wrap",
-            alignItems:"center",
-            background:"rgba(0,0,0,0.35)",
+            flexDirection:"column",
+            gap: 12,
+            width: 300,
+            background:"rgba(0,0,0,0.45)",
             border:"1px solid rgba(255,255,255,0.12)",
-            borderRadius: 16, // ✅ 수정됨 (14 → 16)
-            padding: "10px 20px", // ✅ 수정됨 (8px 10px → 10px 12px)
-            backdropFilter:"blur(4px)"
+            borderRadius: 20,
+            padding: "14px 16px",
+            backdropFilter:"blur(6px)",
+            boxShadow: "0 12px 28px rgba(0,0,0,.35)"
           }}>
-            
-            <Pill>상태 {hudStatus}</Pill>
-            <Pill>카메라 각도 {Number.isFinite(yawDeg) ? Math.round(yawDeg):"—"}° {angleOK?"🟢":"🔴"}</Pill>
-            <Pill>관절 인식 {sideCount}/6</Pill>
-            <Pill>허리 각도 {Number.isFinite(bodyAngle)?Math.round(bodyAngle):"—"}°</Pill>
-            <Pill>횟수 {reps}</Pill>
-          </div>
-
-          {/* 버튼들 */}
-          <div style={{display:"flex", gap: 10, flexWrap:"wrap"}}> {/* ✅ 수정됨 (8 → 10) */}
-            <Button bg="#555" onClick={handleReset}>리셋</Button>
-            {(phase === "running" || phase === "finished") ? (
-              <Button bg="#28a" onClick={()=>nav("/results")}>결과 보기</Button>
-            ) : null}
-            <Button bg="#444" onClick={handleBackToSelect}>종목 선택으로</Button>
+            <Metric label="상태" value={hudStatus} />
+            <Metric
+              label="카메라 각도"
+              value={`${Number.isFinite(yawDeg) ? Math.round(yawDeg) : "—"}°`}
+              dot={angleOK ? "#22c55e" : "#ef4444"}
+            />
+            {/* ▼ 관절 인식 신호등 추가 */}
+            <Metric
+              label="관절 인식"
+              value={`${sideCount}/6`}
+              dot={jointDotColor(sideCount)}
+            />
+            <Metric label="허리 각도" value={`${Number.isFinite(bodyAngle) ? Math.round(bodyAngle) : "—"}°`} />
+            <Metric label="횟수" value={reps} />
           </div>
         </div>
       </div>
@@ -355,36 +528,88 @@ export default function MeasureSitUp() {
   );
 }
 
-function Pill({children}) {
-  return (
-    <span style={{
-      background:"#1a1a2a",
-      border:"1px solid #444",
-      borderRadius:"999px",
-      padding: "8px 12px", // ✅ 수정됨 (6px 10px → 8px 12px)
-      fontSize: "40px" // ✅ 수정됨 (12px → 15px)
-    }}>{children}</span>
-  );
-}
-function Button({bg,onClick,children,disabled}) {
-  return (
-    <button
-      style={{
-        background:bg,
-        opacity: disabled?0.4:1,
-        color:"#fff",
-        border:"none",
-        borderRadius:"10px",
-        padding: "12px 16px", // ✅ 수정됨 (10px 14px → 12px 16px)
-        fontSize: "40px", // ✅ 수정됨 (14px → 16px)
-        fontWeight:600,
-        minWidth:"120px",
-        cursor:"pointer"
-      }}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
+/* ───────────────────────── Guide styles ───────────────────────── */
+const gStyles = {
+  wrap: { filter: "drop-shadow(0 18px 40px rgba(0,0,0,.35))" },
+  card: {
+    width: 280,
+    background: "linear-gradient(180deg, rgba(20,22,30,.95) 0%, rgba(18,20,28,.9) 100%)",
+    border: "1px solid rgba(255,255,255,.08)",
+    borderRadius: 14,
+    padding: 12,
+    color: "#e5f1ff",
+    backdropFilter: "blur(6px)",
+  },
+  header: { display:"flex", alignItems:"center", justifyContent:"space-between" },
+  pill: {
+    display:"inline-block",
+    fontSize:12, fontWeight:800,
+    color:"#0b5cab", background:"#dbeafe", border:"1px solid #93c5fd",
+    padding:"2px 8px", borderRadius:999
+  },
+  close: {
+    appearance:"none",
+    border:"1px solid rgba(255,255,255,.16)",
+    background:"transparent", color:"#e2e8f0",
+    width:28, height:28, borderRadius:8,
+    fontSize:18, lineHeight:"26px", textAlign:"center", cursor:"pointer"
+  },
+  title: { marginTop:8, fontWeight:800, fontSize:14, lineHeight:1.4 },
+  imgWrap: {
+    position:"relative", overflow:"hidden", borderRadius:12,
+    marginTop:10, border:"1px solid rgba(255,255,255,.08)"
+  },
+  img: { width:"100%", display:"block", userSelect:"none" },
+  angleBadge: {
+    position:"absolute", top:8, left:8,
+    background:"#0b5cab", color:"#fff", fontWeight:800, fontSize:12,
+    padding:"4px 8px", borderRadius:999, boxShadow:"0 6px 14px rgba(11,92,171,.25)"
+  },
+  caption: {
+    position:"absolute", bottom:8, right:8,
+    background:"rgba(0,0,0,.55)", border:"1px solid rgba(255,255,255,.08)",
+    fontSize:11, padding:"3px 8px", borderRadius:999, color:"#e2e8f0"
+  },
+  list: { margin:"10px 0 0", padding:"0 0 0 18px", color:"#cbd5e1", fontSize:12, lineHeight:1.5 },
+
+  /* ▼▼ 추가된 관절 안내 스타일 ▼▼ */
+  jointBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 12,
+    background: "linear-gradient(180deg, rgba(15,17,24,.9) 0%, rgba(14,16,22,.85) 100%)",
+    border: "1px solid rgba(255,255,255,.08)",
+  },
+  jointTitle: {
+    fontWeight: 900,
+    fontSize: 12,
+    letterSpacing: "-0.2px",
+    color: "#cfe8ff",
+    marginBottom: 8,
+  },
+  chipGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 6,
+    marginBottom: 6,
+  },
+  chip: {
+    display: "inline-block",
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: 700,
+    padding: "6px 8px",
+    borderRadius: 999,
+    color: "#e6f0ff",
+    background: "rgba(20,120,255,0.12)",
+    border: "1px solid rgba(124,197,255,0.35)",
+    userSelect: "none",
+  },
+  jointHint: {
+    margin: 0,
+    marginTop: 6,
+    fontSize: 11,
+    lineHeight: 1.45,
+    color: "#cbd5e1",
+  },
+};

@@ -8,10 +8,6 @@ const BASE = (import.meta?.env?.BASE_URL || "/").replace(/\/+$/, "/");
 
 // id: "situp"|"step"|"reach"
 function imgCandidates(id) {
-  // 1) 루트에 있는 경우 (/situp.png)
-  // 2) /images 폴더에 있는 경우 (/images/situp.png)
-  // 3) @2x 파일만 있는 경우 대응
-  // 필요에 따라 순서만 바꿔도 됨.
   return [
     `${BASE}${id}.png`,
     `${BASE}images/${id}.png`,
@@ -27,8 +23,8 @@ const FALLBACK_IMG = [
   `${BASE}images/character@2x.png`,
 ];
 
-// ───────────────────────── 16:9 비율 박스 + 폴백 ─────────────────────────
-const CARD_MEDIA_ASPECT_PERCENT = 70.25; // 16:9
+// ───────────────────────── 16:9 비율 박스 ─────────────────────────
+const CARD_MEDIA_ASPECT_PERCENT = 70.25;
 
 function MediaBox({ srcList, alt, fit = "cover" }) {
   const [i, setI] = useState(0);
@@ -55,17 +51,15 @@ function MediaBox({ srcList, alt, fit = "cover" }) {
             inset: 0,
             width: "100%",
             height: "100%",
-            objectFit: fit, // 'cover' or 'contain'
+            objectFit: fit,
             display: "block",
           }}
           loading="lazy"
           decoding="async"
           onError={() => {
-            // 다음 후보로 폴백, 후보 없으면 공용 폴백도 시도
             if (i + 1 < srcList.length) {
               setI(i + 1);
             } else if (srcList !== FALLBACK_IMG) {
-              // 공용 폴백 시도로 교체
               setI(0);
               srcList.splice(0, srcList.length, ...FALLBACK_IMG);
             }
@@ -95,7 +89,7 @@ export default function Select() {
 
   // 완료 여부 및 요약 계산
   const {
-    situpDone, reachDone, stepDone, allDone,
+    situpDone, reachDone, stepDone,
     situpSummary, reachSummary, stepSummary,
   } = useMemo(() => {
     const reps = Number(session?.situp?.reps ?? 0);
@@ -119,7 +113,6 @@ export default function Select() {
 
     return {
       situpDone, reachDone, stepDone,
-      allDone: situpDone && reachDone && stepDone,
       situpSummary, reachSummary, stepSummary,
     };
   }, [session]);
@@ -196,35 +189,64 @@ export default function Select() {
           border: "1px solid #2a4c8f", background: "#112244",
           color: "#9fc3ff", fontSize: 14
         }}>
-          ✅ <b>{labelOf(justFinished.test)}</b> 측정이 완료되었습니다
-          {justFinished.summary ? ` (${justFinished.summary})` : ""}.
+          ✅ 측정이 완료되었습니다.
         </div>
       )}
 
-      <h2 style={{ marginTop: 0, marginBottom: 4, fontSize: 20, fontWeight: 700 }}>
-        종목 선택
-      </h2>
-      <p style={{ marginTop: 0, marginBottom: 16, fontSize: 13, color: "#aaa", lineHeight: 1.4 }}>
-        각 항목을 측정하면 카드에 <b>완료</b> 표시와 <b>간단 결과</b>가 나타납니다.
-        세 종목 모두 완료되면 <b>다음</b> 버튼이 활성화됩니다.
-      </p>
+      {/* 상단 설명 + 우측 상단 버튼 한 줄 레이아웃 */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ minWidth: 260, flex: "1 1 420px" }}>
+          <h2 style={{ marginTop: 0, marginBottom: 4, fontSize: 20, fontWeight: 700 }}>
+            종목 선택
+          </h2>
+          <p style={{ marginTop: 0, marginBottom: 0, fontSize: 13, color: "#aaa", lineHeight: 1.4 }}>
+            각 항목을 측정하면 카드에 <b>완료</b> 표시와 <b>간단 결과</b>가 나타납니다.
+            세 종목 모두 완료되면 <b>다음</b> 버튼이 활성화됩니다.
+          </p>
+        </div>
+
+        {/* 👉 바로 여기: 사진 카드 위쪽 오른쪽 공백 영역 버튼 */}
+        <div style={{ flex: "0 0 auto" }}>
+          <button
+            aria-label="수동으로 입력하기"
+            onClick={() => nav("/results")}
+            style={manualBtnTopRight}
+          >
+            수동으로 입력하기
+          </button>
+        </div>
+      </div>
 
       {/* ───────── 카드 목록 ───────── */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-        gap: 12,
-      }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 12,
+        }}
+      >
         {tests.map((t) => (
-          <div key={t.id} style={{
-            background: "#1a1a2a",
-            border: "1px solid #333",
-            borderRadius: 12,
-            padding: "12px 14px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-          }}>
+          <div
+            key={t.id}
+            style={{
+              background: "#1a1a2a",
+              border: "1px solid #333",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>{t.title}</div>
               <span style={chipStyle(t.done)}>{t.done ? "완료" : "미완료"}</span>
@@ -232,7 +254,6 @@ export default function Select() {
 
             <div style={{ fontSize: 12, color: "#7aa8ff" }}>{t.desc}</div>
 
-            {/* 🔽 16:9 비율의 반응형 이미지 박스 + 폴백 */}
             <MediaBox srcList={imgCandidates(t.id)} alt={`${t.title} 예시`} fit="cover" />
 
             <div style={{ fontSize: 13, color: "#ccc" }}>{t.guide}</div>
@@ -243,21 +264,23 @@ export default function Select() {
               rel="noopener noreferrer"
               style={videoBtnStyle}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M3 7.5V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10H3V7.5zm0-1.9A2 2 0 0 1 5 4h4l1.2 2.4H6.2L7.4 9H5L3 5.6v0zm7.8-1.6H19a2 2 0 0 1 2 2v1.5h-6.3l-1.9-3.5zM12 13l5 3-5 3v-6z" />
               </svg>
               동영상 가이드
             </a>
 
-            <div style={{
-              marginTop: 6,
-              fontSize: 13,
-              color: t.done ? "#9fe6b8" : "#aaa",
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.06)",
-              padding: "8px 10px",
-              borderRadius: 8
-            }}>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 13,
+                color: t.done ? "#9fe6b8" : "#aaa",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                padding: "8px 10px",
+                borderRadius: 8,
+              }}
+            >
               결과: {t.summary}
             </div>
 
@@ -276,30 +299,32 @@ export default function Select() {
       </div>
 
       {/* ───────── 하단 진행 요약 ───────── */}
-      <div style={{
-        marginTop: 20,
-        background: "#0b0b0b",
-        border: "1px solid #222",
-        borderRadius: 12,
-        padding: 14,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 10,
-      }}>
+      <div
+        style={{
+          marginTop: 20,
+          background: "#0b0b0b",
+          border: "1px solid #222",
+          borderRadius: 12,
+          padding: 14,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
         <div style={{ fontSize: 14, color: "#ddd" }}>
-          진행: {tests[0].done ? "●" : "○"} 윗몸 · {tests[2].done ? "●" : "○"} 좌전굴 · {tests[1].done ? "●" : "○"} 스텝
+          진행: {situpDone ? "●" : "○"} 윗몸말아올리기 · {stepDone ? "●" : "○"} 스텝검사 · {reachDone ? "●" : "○"} 앉아윗몸앞으로굽히기(cm)
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
-            style={btnStyle("#0b5cab", !(tests[0].done && tests[1].done && tests[2].done))}
+            style={btnStyle("#0b5cab", !(situpDone && stepDone && reachDone))}
             onClick={() => {
-              const allDone = tests.every(x => x.done);
+              const allDone = situpDone && stepDone && reachDone;
               if (!allDone) return;
               markSessionReady();
               nav("/results");
             }}
-            disabled={!tests.every(x => x.done)}
+            disabled={!(situpDone && stepDone && reachDone)}
           >
             다음
           </button>
@@ -312,14 +337,7 @@ export default function Select() {
   );
 }
 
-// ───────────────────────── 보조 함수 ─────────────────────────
-function labelOf(testKey) {
-  if (testKey === "situp") return "윗몸말아올리기";
-  if (testKey === "reach") return "앉아윗몸앞으로굽히기";
-  if (testKey === "step") return "스텝검사";
-  return String(testKey ?? "");
-}
-
+// ───────────────────────── 보조 함수/스타일 ─────────────────────────
 function btnStyle(bg, disabled = false) {
   return {
     background: bg,
@@ -354,4 +372,18 @@ const videoBtnStyle = {
   transition: "filter 0.12s ease, transform 0.02s ease",
   userSelect: "none",
   outline: "none",
+};
+
+// 상단 설명 오른쪽용 다홍 버튼
+const manualBtnTopRight = {
+  padding: "10px 16px",
+  borderRadius: 10,
+  border: "1px solid rgba(0,0,0,0.2)",
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#fff",
+  background: "linear-gradient(180deg, #ff6a3a 0%, #ff4e3a 100%)",
+  boxShadow: "0 6px 16px rgba(255, 90, 54, 0.35)",
+  cursor: "pointer",
+  transition: "transform 0.05s ease, filter 0.15s ease",
 };

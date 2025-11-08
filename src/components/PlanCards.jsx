@@ -1,27 +1,12 @@
 // src/components/PlanCards.jsx
-import React, { useState } from "react";
+import React from "react"; // [수정] useState 제거 (원문보기 토글 삭제)
 
 /**
- * PlanCards (v3) — 카드 원문(라벨줄 + 값줄) 파서
- * 입력 예시(카드 1장):
- * 종목
- * 달리기
- * 빈도(F)
- * 주 3회
- * 강도(I)
- * 심박수 120~150 bpm 또는 RPE 12-15
- * 시간(T)
- * 회당 30분
- * 유형(T)
- * 달리기 · 대표영상: 달리기 (YouTube: https://www.youtube.com/watch?v=fmtLoxbuflw)
- * (대표영상: 달리기)
- * 진행규칙·주의
- * 운동 전 충분한 준비운동...
- * 🎬 달리기
- * CSV:10171
+ * PlanCards (v5) — 카드 원문 파서 (대표영상 버튼 O, 하단 알약 X)
  *
- * 카드들은 빈 줄(또는 다음 "종목" 라인)로 구분됨.
- * 카드 순서: [유산소(심폐), 근력/근지구력, 유연성] 으로 가정(백엔드 보장).
+ * v3를 기반으로 하되, 카드 본문 하단의 🎬영상제목 및 CSV:ID 알약(Pill)만 제거한 버전입니다.
+ * '대표영상 보기' 버튼은 헤더에 유지됩니다.
+ * '원문 보기' 토글은 Results.jsx에 있으므로 여기서 제거합니다.
  */
 
 const CAT_ORDER = ["유산소(심폐)", "근력/근지구력", "유연성"];
@@ -32,7 +17,7 @@ const CAT_INFO = {
   "기타":          { color: "#334155", emoji: "📋", bg: "#f1f5f9" },
 };
 
-// 라벨 리스트 (콜론 없음! 라벨 줄 다음 줄이 값 줄)
+// 라벨 리스트
 const LABELS = [
   "종목",
   "빈도(F)",
@@ -44,32 +29,22 @@ const LABELS = [
   "진행규칙·주의",
 ];
 
-/* ───────── 파서 유틸 ───────── */
+/* ───────── 파서 유틸 (v3 복원) ───────── */
 
-// 전체 텍스트에서 카드 블록들을 뽑는다.
-// 규칙: "종목" 라인으로 시작하는 덩어리들.
 function splitIntoCardBlocks(full) {
   if (!full) return [];
-  // 표나 기타 부록이 없으니, "종목\n" 기준으로 안전 분할
   const parts = full
-    .split(/\n(?=종목\s*$)/m) // "종목" 라인이 새로 시작되면 분할
+    .split(/\n(?=종목\s*$)/m)
     .map(s => s.trim())
     .filter(Boolean);
-
-  // 혹시 첫 블록이 "종목"으로 안 시작하면 버린다
   return parts.filter(b => /^종목\s*$/m.test(b.split("\n")[0] || ""));
 }
 
-// 라벨의 값(다음 라벨 전까지가 아니라, 바로 '다음 줄' 한 줄만) 추출
-// (백엔드가 '라벨줄 + 값줄' 포맷을 보장)
 function valueAfterSingleLine(block, label) {
-  // label 줄을 찾고 그 바로 다음 줄을 값으로 간주
   const re = new RegExp(`^${escapeRegExp(label)}\\s*$`, "m");
   const m = block.match(re);
   if (!m) return "";
-  // m.index는 label 줄의 시작. 그 다음 줄을 값으로.
   const after = block.slice(m.index + m[0].length);
-  // 다음 줄만 추출
   const nextLine = (after.match(/^\s*\n?([^\n]+)\n?/m) || [])[1] || "";
   return nextLine.trim();
 }
@@ -78,8 +53,7 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// 유형(T) 라인 파싱
-// 예: "달리기 · 대표영상: 달리기 (YouTube: https://...)" 형태
+// [복원] 유형(T) 라인 파싱 (버튼 URL 필요)
 function parseTypeLine(typeLine) {
   const url   = (typeLine.match(/https?:\/\/[^\s)]+/i) || [])[0] || "";
   const title = ((typeLine.match(/대표영상:\s*([^()]+)\s*\(/) || [])[1] || "").trim();
@@ -87,19 +61,19 @@ function parseTypeLine(typeLine) {
   return { url, title, names };
 }
 
-// CSV 라인 추출 ("CSV:숫자")
+// [복원] CSV 라인 추출 (파싱은 하지만 렌더링 안 함)
 function pickCsvId(block) {
   const m = block.match(/CSV\s*:\s*(\d+)/i);
   return (m && m[1]) || "";
 }
 
-// 🎬 라인에서 대표영상 제목 보강
+// [복원] 🎬 라인에서 대표영상 제목 보강
 function pickMovieTitle(block) {
   const m = block.match(/^\s*🎬\s*([^\n]+)\s*$/m);
   return (m && m[1].trim()) || "";
 }
 
-// (대표영상: 제목) 단독 줄도 있을 수 있음 → 제목 보강
+// [복원] (대표영상: 제목) 단독 줄도 있을 수 있음
 function pickParenMovieTitle(block) {
   const m = block.match(/\(대표영상:\s*([^)]+)\)/);
   return (m && m[1].trim()) || "";
@@ -115,10 +89,9 @@ function parseOneCard(block) {
   const caut    = valueAfterSingleLine(block, "주의/대안");
   const rule    = valueAfterSingleLine(block, "진행규칙·주의");
 
+  // [복원] 파싱 로직
   const yt = parseTypeLine(typeRaw);
   const csv = pickCsvId(block);
-
-  // 대표영상 제목 보강 (🎬 제목 / (대표영상: 제목))
   const movieA = pickMovieTitle(block);
   const movieB = pickParenMovieTitle(block);
   const movieTitle = yt.title || movieA || movieB || "";
@@ -132,33 +105,15 @@ function parseOneCard(block) {
     sets,
     caut,
     rule,
-    evid: { csv },
-    yt: { ...yt, title: movieTitle || yt.title, names: yt.names },
+    evid: { csv }, // [복원] 데이터는 파싱
+    yt: { ...yt, title: movieTitle || yt.title, names: yt.names }, // [복원] 데이터는 파싱
     _raw: block,
   };
 }
 
 /* ───────── UI 컴포넌트 ───────── */
 
-function Pill({ children, color = "#334155", bg = "#e2e8f0" }) {
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "4px 8px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 700,
-        color,
-        background: bg,
-        border: `1px solid ${color}22`,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
+// [제거] Pill 컴포넌트 (요청대로 렌더링 안 하므로 삭제)
 
 function Row({ label, value }) {
   if (!value) return null;
@@ -172,6 +127,8 @@ function Row({ label, value }) {
 
 function Card({ catTitle, data }) {
   const info = CAT_INFO[catTitle] || CAT_INFO["기타"];
+  
+  // [복원] 유형(T) 표시에 대표영상 제목 포함 (Pill과 무관)
   const showType = data.yt?.names
     ? `${data.yt.names}\n(대표영상: ${data.yt.title || "-"})`
     : data.type;
@@ -212,6 +169,8 @@ function Card({ catTitle, data }) {
             {info.emoji} {catTitle}
           </div>
         </div>
+        
+        {/* [복원] '대표영상 보기' 버튼 */}
         {data.yt?.url && (
           <a
             href={data.yt.url}
@@ -239,30 +198,25 @@ function Card({ catTitle, data }) {
         <Row label="빈도(F)" value={data.freq} />
         <Row label="강도(I)" value={data.inten} />
         <Row label="시간(T)" value={data.time} />
-        <Row label="유형(T)" value={showType} />
+        <Row label="유형(T)" value={showType} /> {/* [복원] 포맷된 유형 사용 */}
         <Row label="세트/반복/휴식" value={data.sets} />
         <Row label="주의/대안" value={data.caut} />
         <Row label="진행규칙·주의" value={data.rule} />
 
-        {/* Evidence / Video title */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-          {data.yt?.title && <Pill color="#0f172a" bg="#e5e7eb">🎬 {data.yt.title}</Pill>}
-          {data.evid?.csv  && <Pill color="#0b5cab" bg="#dee9ff">CSV:{data.evid.csv}</Pill>}
-        </div>
+        {/* [제거] 요청하신 🎬영상제목 및 CSV:ID 알약(Pill) 렌더링 div 삭제 */}
       </div>
     </div>
   );
 }
 
-export default function PlanCards({ planMd, showRawToggle = true }) {
-  const [open, setOpen] = useState(false);
+export default function PlanCards({ planMd }) { // [수정] showRawToggle prop 제거
   if (!planMd || typeof planMd !== "string") return null;
 
   // 카드 블록 파싱
   const blocks = splitIntoCardBlocks(planMd);
   const cards = blocks.map(parseOneCard);
 
-  // 카테고리 매핑: 백엔드가 [유산소, 근력, 유연성] 순으로 보냄을 가정
+  // 카테고리 매핑
   const withCats = cards.map((c, idx) => ({
     catTitle: CAT_ORDER[idx] || "기타",
     data: c,
@@ -274,27 +228,7 @@ export default function PlanCards({ planMd, showRawToggle = true }) {
         <Card key={i} catTitle={c.catTitle} data={c.data} />
       ))}
 
-      {showRawToggle && (
-        <details style={{ marginTop: 8 }} open={open} onToggle={(e) => setOpen(e.target.open)}>
-          <summary style={{ cursor: "pointer", color: "#0b5cab", fontWeight: 800 }}>
-            {open ? "원문 닫기" : "원문 보기 (전체 텍스트)"}
-          </summary>
-          <pre
-            style={{
-              whiteSpace: "pre-wrap",
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
-              borderRadius: 8,
-              padding: 12,
-              marginTop: 8,
-              fontSize: 12,
-              color: "#0f172a",
-            }}
-          >
-{planMd}
-          </pre>
-        </details>
-      )}
+      {/* [제거] '원문 보기' <details> 블록 삭제 (Results.jsx에 이미 있음) */}
     </div>
   );
 }

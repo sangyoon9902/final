@@ -294,16 +294,14 @@ export default function MeasureStep() {
         </div>
       )}
 
-      {/* 안내 */}
-      <div style={{ background:"#1118", padding:8, borderRadius:8, textAlign:"center", marginBottom:8 }}>
-        {phase === "idle" && <>연결/입력 → 28초 안내 → 3분 스텝 → 1분 휴식 → (수동)10초 카운트×6 / (자동)1분후 HR</>}
-        {phase === "prestep" && <>안내 중입니다. 곧 스텝 검사가 시작됩니다…</>}
-        {phase === "stepping" && <>스텝 남은 시간 {formatMMSS(stepTimer)}</>}
-        {phase === "recovery" && <>1분간 휴식하세요 — 남은 {formatMMSS(recoveryTimer)}</>}
-        {phase === "count10" && <>10초간 심박을 세세요 — 남은 00:{String(count10Timer).padStart(2,"0")}</>}
-        {phase === "count10_done" && <>10초 측정이 끝났습니다. 방금 센 박동 수를 입력하고 ‘입력 완료’를 눌러주세요.</>}
-        {phase === "done" && <>측정 완료 ✅ 결과 확인</>}
-      </div>
+      {/* ✅ 예쁜 안내 리본 */}
+      <FlowRibbon
+        phase={phase}
+        mode={mode}
+        stepTimer={stepTimer}
+        recoveryTimer={recoveryTimer}
+        count10Timer={count10Timer}
+      />
 
       {/* HUD */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:12, marginBottom:12, fontSize:12 }}>
@@ -399,6 +397,138 @@ export default function MeasureStep() {
   );
 }
 
+/* ───────────────────────── 예쁜 안내 리본 ───────────────────────── */
+function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
+  // 단계 정의
+  const steps = [
+    { id: "connect",  label: "연결/입력" },
+    { id: "guide",    label: "28초 안내" },
+    { id: "stepping", label: "3분 스텝" },
+    { id: "rest",     label: "1분 휴식" },
+    { id: "manual",   label: "(수동)10초×6" },
+    { id: "auto",     label: "(자동)1분 후 HR" },
+  ];
+
+  // 현재 단계
+  const currentId =
+    phase === "idle"          ? "connect"  :
+    phase === "prestep"       ? "guide"    :
+    phase === "stepping"      ? "stepping" :
+    phase === "recovery"      ? "rest"     :
+    phase === "count10"       ? "manual"   :
+    phase === "count10_done"  ? "manual"   :
+    phase === "done"          ? "auto"     : "connect";
+
+  const indexOf = (id) => steps.findIndex(s => s.id === id);
+  const currentIdx = Math.max(0, indexOf(currentId));
+
+  // 진행률 (0~1)
+  let localProgress = 0; // 해당 단계 내 진행률
+  if (phase === "prestep") {
+    // 28초 안내
+    const elapsed = Math.min(GUIDE_SEC, GUIDE_SEC - Math.max(0, GUIDE_SEC)); // 고정 안내: 애니메이션만
+    localProgress = elapsed / GUIDE_SEC || 0.01; // 살짝 흘러가는 느낌
+  } else if (phase === "stepping") {
+    localProgress = 1 - (stepTimer / STEP_STEPPING_SEC);
+  } else if (phase === "recovery") {
+    localProgress = 1 - (recoveryTimer / STEP_RECOVERY_SEC);
+  } else if (phase === "count10") {
+    localProgress = 1 - (count10Timer / 10);
+  } else if (phase === "count10_done") {
+    localProgress = 1;
+  } else if (phase === "done") {
+    localProgress = 1;
+  }
+
+  const totalProgress = (currentIdx + localProgress) / (steps.length - 1);
+
+  // 우측 상태 텍스트
+  const rightText =
+    phase === "idle"         ? "준비 완료되면 ‘스텝검사 시작’을 눌러주세요" :
+    phase === "prestep"      ? "안내 중…" :
+    phase === "stepping"     ? `스텝 남은 시간 ${formatMMSS(stepTimer)}` :
+    phase === "recovery"     ? `휴식 남은 시간 ${formatMMSS(recoveryTimer)}` :
+    phase === "count10"      ? `10초 카운트 남은 00:${String(count10Timer).padStart(2,"0")}` :
+    phase === "count10_done" ? "방금 센 박동 수를 입력해주세요" :
+    phase === "done"         ? "측정 완료 ✅" : "";
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      {/* 리본 배경 */}
+      <div style={{
+        position: "relative",
+        borderRadius: 14,
+        padding: "14px 18px",
+        background: "linear-gradient(180deg, rgba(18,18,22,0.95), rgba(10,10,12,0.9))",
+        border: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "0 12px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)"
+      }}>
+        {/* 상단: 제목 + 모드 배지 */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <span style={{ fontSize:16, fontWeight:800, letterSpacing:0.2, color:"#eaeefb" }}>스텝검사 진행</span>
+            <span style={{
+              fontSize:12, fontWeight:700, padding:"6px 10px", borderRadius:999,
+              background:"rgba(80,120,255,0.18)", border:"1px solid rgba(120,160,255,0.35)", color:"#cdd7ff"
+            }}>
+              {mode === "auto" ? "자동모드: 1분 후 HR 기록" : "수동모드: 10초 × 6 카운트"}
+            </span>
+          </div>
+          <span style={{ fontSize:12, opacity:0.85 }}>{rightText}</span>
+        </div>
+
+        {/* 타임라인 */}
+        <div style={{ position:"relative", padding:"10px 0 4px" }}>
+          {/* 베이스 라인 */}
+          <div style={{
+            position:"absolute", left:8, right:8, top:"50%", height:4, transform:"translateY(-50%)",
+            background:"rgba(255,255,255,0.08)", borderRadius:4
+          }} />
+          {/* 진행 라인 */}
+          <div style={{
+            position:"absolute", left:8, right:`calc(8px + ${(1-totalProgress)*100}%)`, top:"50%", height:4,
+            transform:"translateY(-50%)",
+            background:"linear-gradient(90deg, #60a5fa, #34d399)",
+            boxShadow:"0 0 14px rgba(56,189,248,0.35)",
+            borderRadius:4,
+            transition:"right 300ms ease"
+          }} />
+
+          {/* 노드들 */}
+          <div style={{ display:"grid", gridTemplateColumns:`repeat(${steps.length}, 1fr)`, gap:0, position:"relative" }}>
+            {steps.map((s, idx) => {
+              const active = idx <= currentIdx;
+              const current = idx === currentIdx;
+              return (
+                <div key={s.id} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+                  <div style={{
+                    width: current ? 18 : 14,
+                    height: current ? 18 : 14,
+                    borderRadius:"50%",
+                    background: active ? "linear-gradient(180deg, #60a5fa, #34d399)" : "rgba(255,255,255,0.15)",
+                    border: active ? "0" : "1px solid rgba(255,255,255,0.25)",
+                    boxShadow: active ? "0 0 12px rgba(99,102,241,0.45)" : "none",
+                    transition:"all 250ms ease"
+                  }} />
+                  <div style={{
+                    fontSize: current ? 13 : 12,
+                    fontWeight: current ? 800 : 600,
+                    color: current ? "#eaf2ff" : "rgba(255,255,255,0.7)",
+                    textAlign:"center", whiteSpace:"nowrap"
+                  }}>
+                    {s.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── 기타 UI ───────────────────────── */
 function Pill({children}) {
   return (
     <span style={{ background:"#1a1a2a", border:"1px solid #444", borderRadius:"999px", padding:"6px 10px", fontSize:12 }}>
