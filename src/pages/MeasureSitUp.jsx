@@ -319,30 +319,30 @@ export default function MeasureSitUp() {
           bottom:12,
           display:"flex",
           flexDirection:"column",
-          gap:10
+          gap: 12 // ✅ 수정됨 (10 → 12)
         }}>
           {/* HUD */}
           <div style={{
             display:"flex",
-            gap:10,
+            gap: 12, // ✅ 수정됨 (10 → 12)
             flexWrap:"wrap",
             alignItems:"center",
             background:"rgba(0,0,0,0.35)",
             border:"1px solid rgba(255,255,255,0.12)",
-            borderRadius:14,
-            padding:"8px 10px",
+            borderRadius: 16, // ✅ 수정됨 (14 → 16)
+            padding: "10px 20px", // ✅ 수정됨 (8px 10px → 10px 12px)
             backdropFilter:"blur(4px)"
           }}>
-            <Pill>FPS {fps}</Pill>
+            
             <Pill>상태 {hudStatus}</Pill>
-            <Pill>Yaw {Number.isFinite(yawDeg) ? Math.round(yawDeg):"—"}° {angleOK?"🟢":"🔴"}</Pill>
-            <Pill>측면 가시 {sideCount}/6</Pill>
-            <Pill>몸각도 {Number.isFinite(bodyAngle)?Math.round(bodyAngle):"—"}°</Pill>
+            <Pill>카메라 각도 {Number.isFinite(yawDeg) ? Math.round(yawDeg):"—"}° {angleOK?"🟢":"🔴"}</Pill>
+            <Pill>관절 인식 {sideCount}/6</Pill>
+            <Pill>허리 각도 {Number.isFinite(bodyAngle)?Math.round(bodyAngle):"—"}°</Pill>
             <Pill>횟수 {reps}</Pill>
           </div>
 
           {/* 버튼들 */}
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <div style={{display:"flex", gap: 10, flexWrap:"wrap"}}> {/* ✅ 수정됨 (8 → 10) */}
             <Button bg="#555" onClick={handleReset}>리셋</Button>
             {(phase === "running" || phase === "finished") ? (
               <Button bg="#28a" onClick={()=>nav("/results")}>결과 보기</Button>
@@ -361,8 +361,8 @@ function Pill({children}) {
       background:"#1a1a2a",
       border:"1px solid #444",
       borderRadius:"999px",
-      padding:"6px 10px",
-      fontSize:"12px"
+      padding: "8px 12px", // ✅ 수정됨 (6px 10px → 8px 12px)
+      fontSize: "40px" // ✅ 수정됨 (12px → 15px)
     }}>{children}</span>
   );
 }
@@ -375,8 +375,8 @@ function Button({bg,onClick,children,disabled}) {
         color:"#fff",
         border:"none",
         borderRadius:"10px",
-        padding:"10px 14px",
-        fontSize:"14px",
+        padding: "12px 16px", // ✅ 수정됨 (10px 14px → 12px 16px)
+        fontSize: "40px", // ✅ 수정됨 (14px → 16px)
         fontWeight:600,
         minWidth:"120px",
         cursor:"pointer"

@@ -84,7 +84,7 @@ export default function Results() {
   // ▼ 처방 화면 표시 여부 (초기엔 false)
   const [showRx, setShowRx] = useState(false);
   useEffect(() => {
-    if (session?.planMd) setShowRx(true);
+    if (session?.planMd) setShowRx(true); // 기존 planMd 있으면 자동 표시
   }, [session?.planMd]);
 
   const pretty = useMemo(() => JSON.stringify(payload ?? {}, null, 2), [payload]);
@@ -131,7 +131,7 @@ export default function Results() {
         setErrorMsg("서버 응답에 planMd가 없습니다.");
       } else {
         setResultFromServer({ traceId: traceId || "", planMd });
-        setShowRx(true);
+        setShowRx(true); // ✅ 생성되면 화면 전환
       }
     } catch (err) {
       if (err.name !== "AbortError") {
@@ -162,30 +162,33 @@ export default function Results() {
 
   return (
     <div style={styles.container}>
-      {/* 1) 처음엔 이거만 보임 */}
-      <ManualEntryPanel />
+      {/* ManualEntryPanel(카드)와 ctaRow(버튼)를 
+        position: relative 래퍼로 감싸서 버튼을 카드 우하단에 배치합니다.
+      */}
+      <div style={{ position: "relative" }}>
+        
+        {/* 1) 처음엔 이거만 보임 (흰색 카드) */}
+        <ManualEntryPanel />
 
-      {/* 2) CTA: 처방받기 버튼 (처음에만 노출) */}
-      {!showRx && (
-        <div style={styles.ctaBox}>
-          <button
-            style={{
-              ...(session?.readyToSend ? styles.primaryBtnBlue : styles.primaryBtnOrange),
-              opacity: loading ? .6 : 1,
-            }}
-            disabled={!session?.readyToSend || loading}
-            onClick={handleSend}
-            title="유사사례/ACSM 근거 기반 처방 생성"
-          >
-            {loading ? "처방 생성 중…" : "운동처방 받기"}
-          </button>
-          {!session?.readyToSend && (
-            <div style={styles.infoBox}>
-              입력 완료 후 <b>전송 버튼</b>을 눌러주세요.
-            </div>
-          )}
-        </div>
-      )}
+        {/* 2) CTA: 처방받기 버튼 (처음에만 노출) */}
+        {!showRx && (
+          <div style={styles.ctaRow}> 
+            <button
+              style={{
+                ...(session?.readyToSend ? styles.primaryBtnBlue : styles.primaryBtnDisabled),
+                ...styles.ctaButton,               // ← 크기/모서리 통일
+                opacity: loading ? .6 : 1,
+              }}
+              disabled={!session?.readyToSend || loading}
+              onClick={handleSend}
+              title="유사사례/ACSM 근거 기반 처방 생성"
+            >
+              {loading ? "처방 생성 중…" : "운동처방 받기"}
+            </button>
+          </div>
+        )}
+      </div> {/* 래퍼 div 종료 */}
+
 
       {/* 3) 처방 화면: 버튼을 누른 뒤에만 보임 */}
       {showRx && (
@@ -200,16 +203,8 @@ export default function Results() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                {session?.readyToSend && (
-                  <button
-                    style={{ ...styles.primaryBtn, opacity: loading ? .6 : 1 }}
-                    disabled={loading}
-                    onClick={handleSend}
-                    title="유사사례/ACSM 근거 기반 처방 재생성"
-                  >
-                    {loading ? "처방 생성 중…" : "운동처방 다시 받기"}
-                  </button>
-                )}
+                {/* [수정] '운동처방 다시 받기' 버튼을 제거했습니다.
+                */}
                 <button style={styles.ghostBtn} onClick={handlePrint}>인쇄/PDF</button>
               </div>
             </div>
@@ -238,11 +233,6 @@ export default function Results() {
                     </span>
                   </div>
                 </div>
-                {!session?.readyToSend && (
-                  <div style={styles.infoBox}>
-                    입력 완료 후 <b>전송 버튼</b>을 눌러주세요.
-                  </div>
-                )}
               </section>
 
               {/* 측정 결과 */}
@@ -382,12 +372,27 @@ const styles = {
     fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif",
     color: "#0f172a",
   },
-  ctaBox: {
-    marginTop: 12,
+
+  ctaRow: {
+    position: "absolute",
+    // ✅ [수정] ManualEntryPanel의 레이아웃 기준
+    // 16px (card padding) + 10px (hint margin) + ~21px (hint 1줄 높이) = ~47px
+    bottom: 47, 
+    // ✅ [수정] ManualEntryPanel의 card padding과 일치
+    right: 16,  
+    
+    // 버튼을 수직 중앙 정렬하기 위해 flex 유지
     display: "flex",
     alignItems: "center",
-    gap: 12,
   },
+
+  // CTA 버튼 크기/모양
+  ctaButton: {
+    minWidth: 220,
+    borderRadius: 10,       // ManualEntryPanel과 동일
+    // ✅ [수정] height 속성 제거. padding과 border로 높이 결정
+  },
+
   rxCard: {
     background: "#ffffff",
     borderRadius: 16,
@@ -400,6 +405,7 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "space-between",
     paddingBottom: 10, borderBottom: "1px solid rgba(15,23,42,.06)", marginBottom: 10,
   },
+
   // 상단 재생성 버튼(항상 파랑)
   primaryBtn: {
     padding: "10px 14px",
@@ -410,17 +416,18 @@ const styles = {
     fontWeight: 800,
     fontSize: 14,
   },
-  // CTA 전용: 활성/비활성 색 분리
+
+  // ✅ [수정] ManualEntryPanel의 styles.primaryBtn과 일치시킴
   primaryBtnBlue: {
-    padding: "10px 14px",
+    padding: "10px 25px",
     borderRadius: 10,
-    border: "1px solid #0b5cab",
+    border: "5px solid #0b5cab",
     background: "#0b5cab",
     color: "#fff",
-    fontWeight: 800,
+    fontWeight: 700,
     fontSize: 14,
   },
-  primaryBtnOrange: {
+  primaryBtnOrange: { // (현재 사용되지 않음)
     padding: "10px 14px",
     borderRadius: 10,
     border: "1px solid #f97316",
@@ -429,6 +436,19 @@ const styles = {
     fontWeight: 800,
     fontSize: 14,
   },
+  
+  // ✅ [수정] ManualEntryPanel의 styles.primaryBtn과 일치시킴
+  primaryBtnDisabled: {
+    padding: "10px 25px",
+    borderRadius: 10,
+    border: "5px solid #cbd5e1", // 5px border 유지
+    background: "#f1f5f9",
+    color: "#94a3b8",
+    fontWeight: 700,
+    fontSize: 14,
+    cursor: "not-allowed",
+  },
+
   ghostBtn: {
     padding: "10px 14px",
     borderRadius: 10,

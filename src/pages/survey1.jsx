@@ -84,7 +84,10 @@ export default function Survey1() {
     overflow: "hidden",
     boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
   };
-  const header = { background: "#f7f8fb", padding: "14px 18px", fontWeight: 800 };
+  
+  const header = { background: 'rgb(255 255 255)',
+padding: '14px 18px',
+fontWeight: '800' };
   const row = { padding: "16px 18px", borderTop: "1px solid #e6e9f3" };
   const grid = {
     display: "grid",
