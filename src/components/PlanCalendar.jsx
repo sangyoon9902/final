@@ -2,11 +2,14 @@
 import React, { useMemo, useState } from "react";
 
 /* =========================================================
- * PlanCalendar (v3.1, 카드형 처방 텍스트 전용)
- * - v3에서 모달창의 🎬/CSV 알약만 제거 (대표영상 보기 링크는 유지)
+ * PlanCalendar (v4.0 — 오늘 기준 · 4주 고정 · 주말 휴식)
+ * - 항상 4주 플랜으로 렌더링
+ * - 주말(토·일)에는 일정 배치 금지(휴식)
+ * - 빈도(F) 파싱 → 평일 패턴(중복 없이)으로 분배
+ * - 대표영상 링크는 모달에서 유지
  * ========================================================= */
 
-/* ───────── 공통 파서 (PlanCards v3와 동일 규칙) ───────── */
+/* ───────── 공통 파서 ───────── */
 
 // 카드 블록 분할: "종목" 라인이 새로 시작될 때
 function splitIntoCardBlocks(full) {
@@ -18,7 +21,7 @@ function splitIntoCardBlocks(full) {
     .filter((b) => b && /^종목\s*$/m.test((b.split("\n")[0] || "")));
 }
 
-// 라벨 다음 "한 줄"만 값을 취함 (백엔드가 라벨줄+값줄 보장)
+// 라벨 다음 "한 줄"만 값을 취함
 function valueAfterSingleLine(block, label) {
   const re = new RegExp(`^${escapeRegExp(label)}\\s*$`, "m");
   const m = block.match(re);
@@ -31,6 +34,7 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// 유형(T)에서 대표영상 파싱
 function parseTypeLine(typeLine) {
   const url   = (typeLine.match(/https?:\/\/[^\s)]+/i) || [])[0] || "";
   const title = ((typeLine.match(/대표영상:\s*([^()]+)\s*\(/) || [])[1] || "").trim();
@@ -70,8 +74,8 @@ function parseCardsFromPlan(planMd) {
 
     return {
       idx,
-      subject,                 // 칩/ICS summary 표시용
-      freqText: freq,          // "주 3회"
+      subject,
+      freqText: freq,
       inten,
       time,
       typeRaw,
@@ -80,21 +84,20 @@ function parseCardsFromPlan(planMd) {
       rule,
       evid: { csv },
       yt: { ...yt, title: movieTitle || yt.title, names: yt.names },
-      _raw: block,             // 모달 원문 카드 렌더링용
+      _raw: block,
     };
   });
 }
 
-/* ───────── 분배 로직 ───────── */
+/* ───────── 분배 로직(오늘 기준 · 평일만) ───────── */
 
-// 빈도 숫자만 뽑기 ("주 3회" -> 3)
+// "주 3회", "주2~3회" 등에서 숫자 추출(범위는 상한 사용)
 function extractFreqNum(freqText, defaultN) {
   if (!freqText) return defaultN;
-  const m = freqText.match(/주?\s*(\d+)\s*회?/);
-  if (m) {
-    const n = Number(m[1]);
-    if (!Number.isNaN(n)) return n;
-  }
+  const range = freqText.match(/주\s*([0-9]+)\s*~\s*([0-9]+)/);
+  if (range) return Math.max(parseInt(range[1], 10), parseInt(range[2], 10));
+  const single = freqText.match(/주\s*([0-9]+)/);
+  if (single) return parseInt(single[1], 10);
   return defaultN;
 }
 
@@ -119,41 +122,48 @@ function inferKind(card, fallbackIndex) {
   return "cardio";
 }
 
+/**
+ * 평일 패턴(중복 없이 고정):
+ * - 유산소: 월·수·금 (최대 3회)
+ * - 근력:   화·목   (최대 2회)
+ * - 유연성: 월~금   (최대 5회)
+ */
 function buildWeeklyTemplateFromCards(cards) {
   // 요일(1~7, Mon~Sun) → entries[]
   const template = {}; for (let i = 1; i <= 7; i++) template[i] = [];
 
-  const cardioDays   = [1, 3, 5];   // 월 수 금
-  const strengthDays = [2, 4];      // 화 목
-  const flexDays     = [1, 2, 3, 4, 5]; // 평일
+  const cardioDays   = [1, 3, 5];        // 월 수 금
+  const strengthDays = [2, 4];           // 화 목
+  const flexDays     = [1, 2, 3, 4, 5];  // 평일
 
-  // 카드별 빈도 추출 및 분배
   cards.forEach((card, i) => {
     const kind = inferKind(card, i);
-    let freq = 0;
-    if (kind === "cardio")   freq = extractFreqNum(card.freqText, 3);
-    if (kind === "strength") freq = extractFreqNum(card.freqText, 2);
-    if (kind === "flex")     freq = extractFreqNum(card.freqText, flexDays.length);
 
     if (kind === "cardio") {
-      for (let k = 0; k < freq; k++) {
-        const wd = cardioDays[k % cardioDays.length];
+      const wanted = extractFreqNum(card.freqText, 3);
+      const n = Math.min(Math.max(wanted || 0, 0), cardioDays.length); // 최대 3
+      for (let k = 0; k < n; k++) {
+        const wd = cardioDays[k];
         template[wd].push({ ...card, title: "유산소", kind });
       }
     } else if (kind === "strength") {
-      for (let k = 0; k < freq; k++) {
-        const wd = strengthDays[k % strengthDays.length];
+      const wanted = extractFreqNum(card.freqText, 2);
+      const n = Math.min(Math.max(wanted || 0, 0), strengthDays.length); // 최대 2
+      for (let k = 0; k < n; k++) {
+        const wd = strengthDays[k];
         template[wd].push({ ...card, title: "근력", kind });
       }
     } else {
-      // 유연성: 평일 순서대로 freq만큼
-      for (let k = 0; k < freq && k < flexDays.length; k++) {
+      const wanted = extractFreqNum(card.freqText, flexDays.length);
+      const n = Math.min(Math.max(wanted || 0, 0), flexDays.length); // 최대 5
+      for (let k = 0; k < n; k++) {
         const wd = flexDays[k];
         template[wd].push({ ...card, title: "유연성", kind });
       }
     }
   });
 
+  // 토(6), 일(7)은 주말 휴식: 비워둠
   return template;
 }
 
@@ -229,26 +239,19 @@ const S = {
     padding: "8px 12px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff",
     fontWeight: 700, fontSize: 13, cursor: "pointer"
   },
-
   weekHeader: {
     display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8, padding: "6px 4px",
     background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, fontWeight: 700
   },
   colHead: { textAlign: "center", color: "#334155" },
-
-  weekRow: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 },
   dayCell: {
     minHeight: 110, border: "1px solid #e2e8f0", borderRadius: 8, padding: 8,
     display: "grid", gridTemplateRows: "auto 1fr", background: "#ffffff"
   },
-  date: { fontSize: 12, color: "#64748b", textAlign: "right" },
-  empty: { fontSize: 12, color: "#94a3b8", border: "1px dashed #e2e8f0", borderRadius: 8, padding: "6px 8px", textAlign: "center" },
-
   pill: {
     textAlign: "center", border: "1px solid", padding: "10px 10px", borderRadius: 10,
     fontSize: 12, fontWeight: 800, display: "block", cursor: "pointer"
   },
-
   modal: {
     position: "fixed", inset: 0, background: "rgba(15,23,42,.25)",
     display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50
@@ -267,7 +270,6 @@ const S = {
     padding: "6px 10px", cursor: "pointer"
   },
   memoTitle: { fontWeight: 900, fontSize: 16, marginBottom: 6, color: "#92400e" },
-  memoLine: { marginTop: 4, fontSize: 14, color: "#334155" },
   pillWrap: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 },
   pillTag: {
     display: "inline-block", padding: "4px 8px", borderRadius: 999,
@@ -280,28 +282,28 @@ const S = {
  * ========================================================= */
 export default function PlanCalendar({
   planMd,
-  weeks = 4,
-  startDate,
+  // weeks,            // ❌ 외부 weeks 무시 (항상 4주)
+  startDate,          // ⭕️ 옵션: 특정 날짜 기준으로 보고 싶다면 prop으로 전달
   title = "주간 계획표",
   showToolbar = true,
   defaultStartHour = 18,
 }) {
   const [selected, setSelected] = useState(null);
 
-  // 1) 카드 파싱 (유산소/근력/유연성 3장)
+  // 1) 카드 파싱 (유산소/근력/유연성 3장 예상)
   const cards = useMemo(() => parseCardsFromPlan(planMd || ""), [planMd]);
 
-  // 2) 주간 템플릿 (요일 라우팅)
+  // 2) 주간 템플릿(평일 패턴, 주말 비움)
   const template = useMemo(() => buildWeeklyTemplateFromCards(cards), [cards]);
 
-  // 3) 베이스 주(월요일 시작)
+  // 3) 기준 주(오늘이 속한 주의 월요일) — startDate 없으면 오늘
   const base = useMemo(() => startOfWeek(startDate || new Date(), 1), [startDate]);
 
-  // 4) 주차×요일 이벤트 구성
-  // [수정] ()T => ... 를 () => ... 로 수정
+  // 4) 4주 × 7일 셀 빌드 (주말은 템플릿이 비어서 자동 '휴식')
+  const WEEKS = 4;
   const weeksData = useMemo(() => {
     const out = [];
-    for (let w = 0; w < weeks; w++) {
+    for (let w = 0; w < WEEKS; w++) {
       const weekStart = addDays(base, w * 7);
       const days = [];
       for (let i = 0; i < 7; i++) {
@@ -310,7 +312,6 @@ export default function PlanCalendar({
         const entries = (template[weekday] || []).map((e, idx) => ({
           ...e,
           uid: `${fmtDate(date)}-${idx}-${e.kind}`,
-          // 셀 칩: 종목명만 표시 → e.subject 사용
           chipLabel: e.subject || e.title,
           date: new Date(new Date(date).setHours(defaultStartHour, 0, 0, 0)),
         }));
@@ -319,9 +320,9 @@ export default function PlanCalendar({
       out.push({ weekStart, days });
     }
     return out;
-  }, [base, weeks, template, defaultStartHour]);
+  }, [base, template, defaultStartHour]);
 
-  // 5) ICS 내보내기
+  // 5) ICS 내보내기 (주말은 비어있으므로 포함 안 됨)
   function downloadIcs() {
     const events = [];
     for (const w of weeksData) {
@@ -330,7 +331,7 @@ export default function PlanCalendar({
           events.push({
             uid: e.uid,
             date: e.date,
-            summary: e.subject || e.title || "", // 종목명
+            summary: e.subject || e.title || "",
             durationMin: guessDuration(e.time),
             description: [
               `유형(T): ${e.typeRaw || "-"}`,
@@ -340,9 +341,9 @@ export default function PlanCalendar({
               e.sets ? `세트/반복/휴식: ${e.sets}` : "",
               e.caut ? `주의/대안: ${e.caut}` : "",
               e.rule ? `진행규칙·주의: ${e.rule}` : "",
-              e.yt?.title ? `🎬 ${e.yt.title}` : "", // .ics 파일에는 정보 유지
-              e.yt?.url ? `URL: ${e.yt.url}` : "",     // .ics 파일에는 정보 유지
-              e.evid?.csv ? `CSV:${e.evid.csv}` : "", // .ics 파일에는 정보 유지
+              e.yt?.title ? `🎬 ${e.yt.title}` : "",
+              e.yt?.url ? `URL: ${e.yt.url}` : "",
+              e.evid?.csv ? `CSV:${e.evid.csv}` : "",
             ].filter(Boolean).join("\n"),
           });
         }
@@ -353,7 +354,7 @@ export default function PlanCalendar({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "exercise_plan.ics";
+    a.download = "exercise_plan_4weeks_weekend_rest.ics";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -366,7 +367,7 @@ export default function PlanCalendar({
         <div style={S.header}>
           <div>
             <div style={S.h1}>{title}</div>
-            <div style={S.sub}>처방 카드(유산소·근력·유연성)를 자동 배치한 {weeks}주 루틴</div>
+            <div style={S.sub}>오늘 기준 · <b>4주</b> · <b>주말 휴식</b> · 처방 카드(유산소·근력·유연성) 자동 배치</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button style={S.ghostBtn} onClick={downloadIcs}>캘린더(.ics) 다운로드</button>
@@ -393,14 +394,11 @@ export default function PlanCalendar({
           ))}
         </div>
 
-        {/* 주간 그리드 */}
+        {/* 주간 그리드 (토·일은 휴식 표시) */}
         {weeksData.map((w, wi) => (
           <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
             {w.days.map((day, di) => (
-              <div key={di} style={{
-                minHeight: 110, border: "1px solid #e2e8f0", borderRadius: 8, padding: 8,
-                display: "grid", gridTemplateRows: "auto 1fr", background: "#ffffff"
-              }}>
+              <div key={di} style={S.dayCell}>
                 <div style={{ fontSize: 12, color: "#64748b", textAlign: "right" }}>{day.date.getDate()}</div>
                 <div style={{ display: "grid", gap: 6 }}>
                   {day.entries.length === 0 && (
@@ -426,7 +424,7 @@ export default function PlanCalendar({
         ))}
       </div>
 
-      {/* 모달: “우리가 처방한 카드” 그대로 */}
+      {/* 모달: 카드 원문 */}
       {selected && (
         <div style={S.modal} onClick={() => setSelected(null)}>
           <div style={S.modalCard} onClick={(e) => e.stopPropagation()}>
@@ -437,7 +435,6 @@ export default function PlanCalendar({
               <button style={S.close} onClick={() => setSelected(null)}>닫기</button>
             </div>
 
-            {/* 라벨+값 카드 본문 */}
             <KV label="종목" value={selected.card.subject} />
             <KV label="빈도(F)" value={selected.card.freqText} />
             <KV label="강도(I)" value={selected.card.inten} />
@@ -454,12 +451,8 @@ export default function PlanCalendar({
             <KV label="주의/대안" value={selected.card.caut} />
             <KV label="진행규칙·주의" value={selected.card.rule} />
 
-            {/* [수정] 🎬 / CSV 알약 제거 */}
+            {/* 대표영상 링크만 유지(🎬/CSV 알약 제거) */}
             <div style={S.pillWrap}>
-              {/*
-              {selected.card.yt?.title && <span style={S.pillTag}>🎬 {selected.card.yt.title}</span>}
-              {selected.card.evid?.csv && <span style={S.pillTag}>CSV:{selected.card.evid.csv}</span>}
-              */}
               {selected.card.yt?.url && (
                 <a
                   href={selected.card.yt.url}

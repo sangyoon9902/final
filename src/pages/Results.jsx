@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../state/AppState";
 import { sendSessionSummary } from "../api/session";
 import { useBuildSessionPayload } from "../api/buildSessionPayload";
-import ReactMarkdown from "react-markdown"; // [참고] ReactMarkdown은 이제 사용되지 않습니다.
+import ReactMarkdown from "react-markdown"; // ✅ 조언 섹션 렌더용
 import ManualEntryPanel from "../components/ManualEntryPanel";
 import PlanCalendar from "../components/PlanCalendar.jsx";
 import PlanCards from "../components/PlanCards.jsx";
@@ -69,6 +69,21 @@ function Row({ name, value, unit, score }) {
   );
 }
 
+/** 🔎 서버에서 planMd에 다음 마커로 조언 블록이 붙어온다:
+ *  "\n---\n### 설문 기반 ACSM6 조언(LLM)\n"
+ *  → 이 마커로 split해서 카드/조언을 분리 렌더
+ */
+const ADVICE_MARK = "### 설문 기반 ACSM6 조언(LLM)";
+function splitPlanMd(planMd = "") {
+  if (!planMd) return { cardsMd: "", adviceMd: "" };
+  const idx = planMd.indexOf(ADVICE_MARK);
+  if (idx < 0) return { cardsMd: planMd, adviceMd: "" };
+  return {
+    cardsMd: planMd.slice(0, idx).trim(),
+    adviceMd: planMd.slice(idx).trim(), // ADVICE_MARK 포함
+  };
+}
+
 export default function Results() {
   const { session, setResultFromServer } = useApp();
   const payload = useBuildSessionPayload();
@@ -84,11 +99,8 @@ export default function Results() {
   // ▼ 처방 화면 표시 여부 (초기엔 false)
   const [showRx, setShowRx] = useState(false);
   useEffect(() => {
-    if (session?.planMd) setShowRx(true); // 기존 planMd 있으면 자동 표시
+    if (session?.planMd) setShowRx(true);
   }, [session?.planMd]);
-
-  // [제거] 'pretty' 변수 (JSON 표시에 사용되었음)
-  // const pretty = useMemo(() => JSON.stringify(payload ?? {}, null, 2), [payload]);
 
   // ───── 표시값 매핑
   const user = payload?.user ?? {};
@@ -132,7 +144,7 @@ export default function Results() {
         setErrorMsg("서버 응답에 planMd가 없습니다.");
       } else {
         setResultFromServer({ traceId: traceId || "", planMd });
-        setShowRx(true); // ✅ 생성되면 화면 전환
+        setShowRx(true);
       }
     } catch (err) {
       if (err.name !== "AbortError") {
@@ -143,39 +155,31 @@ export default function Results() {
     }
   }
 
-  // ✅ 언마운트 시 요청 중단
-  useEffect(() => {
-    return () => {
-      if (abortRef.current) abortRef.current.abort();
-    };
-  }, []);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   function handlePrint() { window.print(); }
-
   async function copyPlanMd() {
     try { await navigator.clipboard.writeText(session?.planMd || ""); } catch {}
   }
-  
-  // [제거] copyPayload 함수
-  // async function copyPayload() { ... }
+  async function copyAdviceMd(adviceMd) {
+    try { await navigator.clipboard.writeText(adviceMd || ""); } catch {}
+  }
 
   const hasPlan = !!session?.planMd;
+  const { cardsMd, adviceMd } = splitPlanMd(session?.planMd || "");
 
   return (
     <div style={styles.container}>
-      {/* [수정] !showRx (처방전이 보이지 않을 때)일 때만 ManualEntryPanel 래퍼를 렌더링합니다. */}
       {!showRx && (
         <div style={{ position: "relative" }}>
-          
-          {/* 1) 처음엔 이거만 보임 (흰색 카드) */}
+          {/* 1) 입력 카드 */}
           <ManualEntryPanel />
-
-          {/* 2) CTA: 처방받기 버튼 (처음에만 노출) */}
-          <div style={styles.ctaRow}> 
+          {/* 2) CTA */}
+          <div style={styles.ctaRow}>
             <button
               style={{
                 ...(session?.readyToSend ? styles.primaryBtnBlue : styles.primaryBtnDisabled),
-                ...styles.ctaButton,               // ← 크기/모서리 통일
+                ...styles.ctaButton,
                 opacity: loading ? .6 : 1,
               }}
               disabled={!session?.readyToSend || loading}
@@ -185,11 +189,9 @@ export default function Results() {
               {loading ? "처방 생성 중…" : "운동처방 받기"}
             </button>
           </div>
-        </div> /* 래퍼 div 종료 */
+        </div>
       )}
 
-
-      {/* 3) 처방 화면: 버튼을 누른 뒤에만 보임 */}
       {showRx && (
         <>
           <div style={styles.rxCard}>
@@ -206,7 +208,7 @@ export default function Results() {
               </div>
             </div>
 
-            {/* 상단 요약 (프로필/측정) */}
+            {/* 상단 요약 */}
             <div style={styles.topGrid}>
               {/* 프로필 */}
               <section style={styles.panel}>
@@ -247,7 +249,7 @@ export default function Results() {
               </section>
             </div>
 
-            {/* ▼ 맞춤 운동처방 섹션 */}
+            {/* ▼ 맞춤 운동처방 (카드) */}
             <section style={styles.planPanel}>
               <div style={styles.planHeader}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -274,10 +276,9 @@ export default function Results() {
                 <div style={styles.planBody}>
                   {hasPlan ? (
                     <>
-                      {typeof PlanCards === "function" ? <PlanCards planMd={session.planMd} /> : null}
-                      
-                      {/* [제거] '원문 전체 보기' <details> 블록 삭제 */}
-                      
+                      {typeof PlanCards === "function" ? (
+                        <PlanCards planMd={cardsMd || session.planMd} />
+                      ) : null}
                     </>
                   ) : (
                     <div style={{ color: "#64748b", fontSize: 14 }}>
@@ -294,6 +295,46 @@ export default function Results() {
                 </div>
               </div>
             </section>
+
+            {/* ▼ NEW: 설문 기반 ACSM6 조언 패널 */}
+            {hasPlan && adviceMd && (
+              <section style={styles.advicePanel}>
+                <div style={styles.adviceHeader}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ ...styles.planDot, background:"#0ea5e9", boxShadow:"0 0 0 3px #38bdf833" }} />
+                    <h3 style={{ margin: 0, fontSize: 18 }}>설문 기반 맞춤형 조언</h3>
+                  </div>
+                  <div>
+                    <button
+                      style={styles.ghostBtn}
+                      onClick={() => copyAdviceMd(adviceMd)}
+                      title="조언 마크다운 복사"
+                    >
+                      조언 복사
+                    </button>
+                  </div>
+                </div>
+
+                <div style={styles.adviceBody}>
+                  <ReactMarkdown
+                    components={{
+                      h3: ({node, ...props}) => <h3 style={{margin:"14px 0 6px"}} {...props} />,
+                      h4: ({node, ...props}) => <h4 style={{margin:"10px 0 4px"}} {...props} />,
+                      li: ({node, ...props}) => <li style={{margin:"4px 0"}} {...props} />,
+                      code: ({node, inline, ...props}) =>
+                        inline ? <code style={{background:"#f8fafc", padding:"2px 6px", borderRadius:6}} {...props} /> :
+                        <pre style={{background:"#0f172a", color:"#e2e8f0", padding:12, borderRadius:10, overflow:"auto"}}><code {...props} /></pre>
+                    }}
+                  >
+                    {adviceMd}
+                  </ReactMarkdown>
+
+                  <div style={styles.noticeLine}>
+                    ※ 본 조언은 일반적 정보이며, 증상 발현 시 즉시 중단하고 전문가와 상담하세요.
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* ▼ 캘린더 섹션 */}
             {hasPlan && (
@@ -341,9 +382,6 @@ export default function Results() {
               </section>
             )}
           </div>
-
-          {/* [제거] 디버그/원본 페이로드 박스 (debugCard) 삭제 */}
-          
         </>
       )}
     </div>
@@ -362,23 +400,12 @@ const styles = {
 
   ctaRow: {
     position: "absolute",
-    // ✅ [수정] ManualEntryPanel의 레이아웃 기준
-    // 16px (card padding) + 10px (hint margin) + ~21px (hint 1줄 높이) = ~47px
-    bottom: 47, 
-    // ✅ [수정] ManualEntryPanel의 card padding과 일치
-    right: 16,  
-    
-    // 버튼을 수직 중앙 정렬하기 위해 flex 유지
+    bottom: 47,
+    right: 16,
     display: "flex",
     alignItems: "center",
   },
-
-  // CTA 버튼 크기/모양
-  ctaButton: {
-    minWidth: 220,
-    borderRadius: 10,       // ManualEntryPanel과 동일
-    // ✅ [수정] height 속성 제거. padding과 border로 높이 결정
-  },
+  ctaButton: { minWidth: 220, borderRadius: 10 },
 
   rxCard: {
     background: "#ffffff",
@@ -393,18 +420,6 @@ const styles = {
     paddingBottom: 10, borderBottom: "1px solid rgba(15,23,42,.06)", marginBottom: 10,
   },
 
-  // 상단 재생성 버튼(항상 파랑)
-  primaryBtn: {
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: "1px solid #0b5cab",
-    background: "#0b5cab",
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: 14,
-  },
-
-  // ✅ [수정] ManualEntryPanel의 styles.primaryBtn과 일치시킴
   primaryBtnBlue: {
     padding: "10px 25px",
     borderRadius: 10,
@@ -414,28 +429,16 @@ const styles = {
     fontWeight: 700,
     fontSize: 14,
   },
-  primaryBtnOrange: { // (현재 사용되지 않음)
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: "1px solid #f97316",
-    background: "#f97316", // 다홍/오렌지
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: 14,
-  },
-  
-  // ✅ [수정] ManualEntryPanel의 styles.primaryBtn과 일치시킴
   primaryBtnDisabled: {
     padding: "10px 25px",
     borderRadius: 10,
-    border: "5px solid #cbd5e1", // 5px border 유지
+    border: "5px solid #cbd5e1",
     background: "#f1f5f9",
     color: "#94a3b8",
     fontWeight: 700,
     fontSize: 14,
     cursor: "not-allowed",
   },
-
   ghostBtn: {
     padding: "10px 14px",
     borderRadius: 10,
@@ -444,7 +447,9 @@ const styles = {
     color: "#0f172a",
     fontWeight: 700,
     fontSize: 14,
+    cursor: "pointer",
   },
+
   topGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1.4fr",
@@ -463,15 +468,7 @@ const styles = {
     gridTemplateColumns: "100px 1fr",
     rowGap: 8, columnGap: 12, fontSize: 14,
   },
-  infoBox: {
-    marginTop: 10,
-    background: "#eef6ff",
-    border: "1px solid #bcdcff",
-    color: "#0b5cab",
-    borderRadius: 10,
-    padding: "10px 12px",
-    fontSize: 13,
-  },
+
   planPanel: {
     marginTop: 14,
     background: "#fff",
@@ -495,6 +492,7 @@ const styles = {
   dot: { display: "inline-block", width: 10, height: 10, borderRadius: 999 },
   planBody: { padding: 16 },
   footer: { padding: "0 16px 14px" },
+
   errorBox: {
     background: "#ffe5e5",
     border: "1px solid #ff9f9f",
@@ -513,5 +511,35 @@ const styles = {
     background: "#fff",
     cursor: "pointer",
   },
-  // [제거] rawSection, rawSummary, md, debugCard, jsonBox 스타일
+
+  // NEW: 조언 패널
+  advicePanel: {
+    marginTop: 14,
+    background: "#ffffff",
+    border: "1px solid rgba(2,6,23,.08)",
+    borderRadius: 12,
+    overflow: "hidden",
+    boxShadow: "0 10px 30px rgba(2,6,23,.05)",
+  },
+  adviceHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "14px 16px",
+    background: "linear-gradient(180deg,#f0f9ff,#ffffff)",
+    borderBottom: "1px solid rgba(2,6,23,.06)",
+  },
+  adviceBody: {
+    padding: 16,
+    color: "#0f172a",
+  },
+  noticeLine: {
+    marginTop: 10,
+    padding: "8px 10px",
+    fontSize: 12,
+    color: "#0369a1",
+    background: "#e0f2fe",
+    border: "1px dashed #bae6fd",
+    borderRadius: 10,
+  },
 };

@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-
+from routers import review  # ✅ 추가
 # ───────────── 내부 모듈 (server/를 루트로 실행하므로 '점(.)' 제거) ─────────────
 from db import Base, engine, get_db
 from models import DBUser, DBResult
@@ -168,3 +168,4 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
 
 # ───────────── 라우터 등록 ─────────────
 app.include_router(users.router)
+app.include_router(review.router) 

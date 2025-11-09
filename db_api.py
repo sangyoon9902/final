@@ -1,5 +1,5 @@
 # db_api.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Any, Dict, Optional
@@ -18,7 +18,7 @@ ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,          # 쿠키 안 쓰면 False로 둬도 OK
+    allow_credentials=True,  # 쿠키 안 쓰면 False여도 무방
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -27,6 +27,7 @@ app.add_middleware(
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("db_api")
 
+# ----- SQLite 헬퍼 -----
 def connect():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -39,7 +40,6 @@ def _loads(s: Optional[str]):
         return None
 
 def _get(row: sqlite3.Row | Dict[str, Any], key: str, default=None):
-    # Row/Dict 모두 안전 접근
     try:
         if isinstance(row, dict):
             return row.get(key, default)
@@ -61,7 +61,7 @@ def _row_to_summary(r: sqlite3.Row):
     }
 
 def _row_to_full(r: sqlite3.Row | Dict[str, Any]):
-    # 결과창(Results.jsx)과 호환되는 구조
+    # Results.jsx / Review.jsx와 호환되는 구조
     user         = _loads(_get(r, "user_json")) or {}
     surveys      = _loads(_get(r, "surveys_json")) or {}
     measurements = _loads(_get(r, "measurements_json")) or {}
@@ -74,28 +74,30 @@ def _row_to_full(r: sqlite3.Row | Dict[str, Any]):
         "trace_id": _get(r, "trace_id", ""),
         "created_at": _get(r, "created_at", None),
         "status": _get(r, "status", None),
-        # ▼ Results.jsx payload-like
         "user": user,
         "surveys": surveys,
         "measurements": measurements,
-        # ▼ sendSessionSummary 호환
         "planMd": plan_md,
         "evidence": evidence,
         "raw": raw,
     }
 
+# ----- 기본/헬스 -----
 @app.get("/")
 def root():
     return {
         "ok": True,
         "message": "Results JSON API",
         "db_path": DB_PATH,
-        "endpoints": ["/api/results?page=&size=&q=", "/api/results/{id_or_trace_id}", "/healthz"],
+        "endpoints": [
+            "/api/results?page=&size=&q=&userId=&id=&traceId=",
+            "/api/results/{id_or_trace_id}",
+            "/healthz",
+        ],
     }
 
 @app.get("/healthz")
 def healthz():
-    # 간단한 쿼리로 DB 연결 확인
     try:
         conn = connect(); conn.execute("SELECT 1"); conn.close()
         return {"ok": True}
@@ -103,18 +105,91 @@ def healthz():
         log.exception("healthz failed")
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
+# ----- 리스트 조회 (id/traceId 정확 매칭 + userId + q 폴백) -----
 @app.get("/api/results")
-def list_results(page: int = 1, size: int = 50, q: str = ""):
+def list_results(
+    page: int = 1,
+    size: int = 50,
+    q: str = "",
+    userId: Optional[str] = None,
+    id: Optional[str] = None,
+    traceId: Optional[str] = None,
+):
     size = max(1, min(PAGE_SIZE_MAX, int(size)))
     off = (max(1, int(page)) - 1) * size
-    like = f"%{q}%"
-
     conn = connect(); cur = conn.cursor()
+
+    # 0) 결과 id 정확 매칭
+    if id:
+        total = cur.execute(
+            "SELECT COUNT(*) FROM results WHERE CAST(id AS TEXT)=?",
+            (id,),
+        ).fetchone()[0]
+        rows = cur.execute("""
+          SELECT
+            id, trace_id, status, created_at,
+            json_extract(user_json,'$.name') AS name,
+            json_extract(user_json,'$.sex')  AS sex,
+            json_extract(user_json,'$.age')  AS age
+            FROM results
+           WHERE CAST(id AS TEXT)=?
+        ORDER BY COALESCE(created_at,'') DESC, id DESC
+           LIMIT ? OFFSET ?
+        """, (id, size, off)).fetchall()
+        conn.close()
+        return {"page": page, "size": size, "total": total, "items": [_row_to_summary(r) for r in rows]}
+
+    # 0-2) trace_id 정확 매칭
+    if traceId:
+        total = cur.execute(
+            "SELECT COUNT(*) FROM results WHERE trace_id=?",
+            (traceId,),
+        ).fetchone()[0]
+        rows = cur.execute("""
+          SELECT
+            id, trace_id, status, created_at,
+            json_extract(user_json,'$.name') AS name,
+            json_extract(user_json,'$.sex')  AS sex,
+            json_extract(user_json,'$.age')  AS age
+            FROM results
+           WHERE trace_id=?
+        ORDER BY COALESCE(created_at,'') DESC, id DESC
+           LIMIT ? OFFSET ?
+        """, (traceId, size, off)).fetchall()
+        conn.close()
+        return {"page": page, "size": size, "total": total, "items": [_row_to_summary(r) for r in rows]}
+
+    # 1) userId 정확 매칭
+    if userId:
+        total = cur.execute("""
+          SELECT COUNT(*)
+            FROM results
+           WHERE json_extract(user_json,'$.userId') = ?
+        """, (userId,)).fetchone()[0]
+
+        rows = cur.execute("""
+          SELECT
+            id, trace_id, status, created_at,
+            json_extract(user_json,'$.name') AS name,
+            json_extract(user_json,'$.sex')  AS sex,
+            json_extract(user_json,'$.age')  AS age
+            FROM results
+           WHERE json_extract(user_json,'$.userId') = ?
+        ORDER BY COALESCE(created_at,'') DESC, id DESC
+           LIMIT ? OFFSET ?
+        """, (userId, size, off)).fetchall()
+
+        conn.close()
+        return {"page": page, "size": size, "total": total, "items": [_row_to_summary(r) for r in rows]}
+
+    # 2) 폴백: q 부분문자열 검색 (기존 동작 유지)
+    like = f"%{q}%"
     total = cur.execute("""
-      SELECT COUNT(*) FROM results
-      WHERE CAST(user_json AS TEXT) LIKE ?
-         OR CAST(measurements_json AS TEXT) LIKE ?
-         OR CAST(surveys_json AS TEXT) LIKE ?
+      SELECT COUNT(*)
+        FROM results
+       WHERE CAST(user_json AS TEXT)        LIKE ?
+          OR CAST(measurements_json AS TEXT) LIKE ?
+          OR CAST(surveys_json AS TEXT)      LIKE ?
     """, (like, like, like)).fetchone()[0]
 
     rows = cur.execute("""
@@ -123,31 +198,33 @@ def list_results(page: int = 1, size: int = 50, q: str = ""):
         json_extract(user_json,'$.name') AS name,
         json_extract(user_json,'$.sex')  AS sex,
         json_extract(user_json,'$.age')  AS age
-      FROM results
-      WHERE CAST(user_json AS TEXT) LIKE ?
-         OR CAST(measurements_json AS TEXT) LIKE ?
-         OR CAST(surveys_json AS TEXT) LIKE ?
-      ORDER BY id DESC
-      LIMIT ? OFFSET ?
+        FROM results
+       WHERE CAST(user_json AS TEXT)        LIKE ?
+          OR CAST(measurements_json AS TEXT) LIKE ?
+          OR CAST(surveys_json AS TEXT)      LIKE ?
+    ORDER BY COALESCE(created_at,'') DESC, id DESC
+       LIMIT ? OFFSET ?
     """, (like, like, like, size, off)).fetchall()
+
     conn.close()
+    return {"page": page, "size": size, "total": total, "items": [_row_to_summary(r) for r in rows]}
 
-    return {
-        "page": page,
-        "size": size,
-        "total": total,
-        "items": [_row_to_summary(r) for r in rows],
-    }
-
+# ----- 단건 조회 (id 또는 trace_id) -----
 @app.get("/api/results/{key}")
 def get_result(key: str):
     try:
         conn = connect(); cur = conn.cursor()
         # 1) id로 조회
-        row = cur.execute("SELECT * FROM results WHERE CAST(id AS TEXT)=? LIMIT 1", (key,)).fetchone()
+        row = cur.execute(
+            "SELECT * FROM results WHERE CAST(id AS TEXT)=? LIMIT 1",
+            (key,)
+        ).fetchone()
         # 2) trace_id로 조회
         if not row:
-            row = cur.execute("SELECT * FROM results WHERE trace_id=? LIMIT 1", (key,)).fetchone()
+            row = cur.execute(
+                "SELECT * FROM results WHERE trace_id=? LIMIT 1",
+                (key,)
+            ).fetchone()
         conn.close()
 
         if not row:
@@ -158,10 +235,9 @@ def get_result(key: str):
         raise
     except Exception as e:
         log.exception("get_result failed for key=%s", key)
-        # 500이 떠도 CORS 헤더가 붙도록 JSONResponse 사용
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-from fastapi import Body
 
+# ----- 부분 업데이트 (planMd / status) -----
 @app.patch("/api/results/{key}")
 def update_result(key: str, payload: dict = Body(...)):
     """
@@ -180,9 +256,13 @@ def update_result(key: str, payload: dict = Body(...)):
     conn = connect(); cur = conn.cursor()
 
     # 키 해석
-    row = cur.execute("SELECT id FROM results WHERE CAST(id AS TEXT)=? LIMIT 1", (key,)).fetchone()
+    row = cur.execute(
+        "SELECT id FROM results WHERE CAST(id AS TEXT)=? LIMIT 1", (key,)
+    ).fetchone()
     if not row:
-        row = cur.execute("SELECT id FROM results WHERE trace_id=? LIMIT 1", (key,)).fetchone()
+        row = cur.execute(
+            "SELECT id FROM results WHERE trace_id=? LIMIT 1", (key,)
+        ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "Not found")
@@ -190,8 +270,7 @@ def update_result(key: str, payload: dict = Body(...)):
     rid = row["id"]
 
     # 동적 업데이트
-    sets = []
-    params = []
+    sets, params = [], []
     if plan_md is not None:
         sets.append("plan_md = ?")
         params.append(plan_md)

@@ -8,7 +8,6 @@ import flatpickr from "flatpickr";
 import { Korean } from "flatpickr/dist/l10n/ko.js";
 import "flatpickr/dist/flatpickr.min.css";
 
-
 function calcAgeFromDobISO(dobISO, now = new Date()) {
   if (!dobISO) return null;
   const [y, m, d] = dobISO.split("-").map(Number);
@@ -75,6 +74,34 @@ function DobPicker({ value, onChange, disabled, badgeText }) {
   );
 }
 
+/* ───── ID 모달 ───── */
+function IdModal({ open, id, onConfirm }) {
+  if (!open) return null;
+  return (
+    <div className="modalBackdrop" role="dialog" aria-modal="true" aria-label="id 안내">
+      <div className="modalCard">
+        <h3 className="modalTitle">id가 발급되었습니다</h3>
+        <p className="modalDesc">아래 id는 결과 조회/리뷰 시 활용됩니다.</p>
+        <div className="modalUidRow">
+          <code className="modalUid">{id}</code>
+          <button
+            type="button"
+            className="modalCopy"
+            onClick={async () => {
+              try { await navigator.clipboard.writeText(id); } catch {}
+            }}
+          >
+            복사
+          </button>
+        </div>
+        <button className="modalOk" type="button" onClick={onConfirm}>
+          확인하고 설문으로 이동
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Start() {
   const nav = useNavigate();
   const { setProfile } = useApp();
@@ -82,6 +109,10 @@ export default function Start() {
   const [form, setForm] = useState({ name: "", sex: "M", dob: "", height: "", weight: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+
+  // 제출 후 모달에 보여줄 id만 관리 (초기 표시 X)
+  const [visibleId, setVisibleId] = useState("");
+  const [showIdModal, setShowIdModal] = useState(false);
 
   const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const agePreview = form.dob ? calcAgeFromDobISO(form.dob) : null;
@@ -102,11 +133,25 @@ export default function Start() {
 
     try {
       setLoading(true);
-      const { userId } = await createUser({ name: name.trim() });
-      const profile = { name: name.trim(), sex, dob, age, height: Number(height), weight: Number(weight), userId };
+      // 서버에서 새 id 발급
+      const { id } = await createUser({ name: name.trim() });
+
+      const profile = {
+        name: name.trim(),
+        sex,
+        dob,
+        age,
+        height: Number(height),
+        weight: Number(weight),
+        id,
+      };
+
       setProfile(profile);
-      localStorage.setItem("ai_fitness_user", JSON.stringify({ name: profile.name, userId }));
-      nav("/survey1");
+      localStorage.setItem("ai_fitness_user", JSON.stringify({ name: profile.name, id }));
+
+      // ✅ 제출 후에만 모달로 노출
+      setVisibleId(id);
+      setShowIdModal(true);
     } catch (e) {
       console.error(e);
       setErr("계정 생성 중 오류가 발생했습니다.");
@@ -118,60 +163,17 @@ export default function Start() {
   return (
     <div className="page">
       {/* 로컬 스타일 */}
-      <style>{` /* 1) 모든 요소 경계 계산을 통일 */
-                *, *::before, *::after { box-sizing: border-box; }
-
-                /* 2) grid 자식이 컬럼 밖으로 밀려나지 않게 */
-                .grid > * { min-width: 0; }           /* <-- 핵심 */
-                .grid > label { display:block; }      /* 높이 계산 안정화 */
-
-                /* 3) 컨트롤 공통 규격 완전 고정: 네 칸 모두 동일 높이/패딩/라운드 */
-                :root{
-                  --radius:16px;
-                  --inpH:56px;        /* 네 칸 동일 높이 */
-                  --font:16px;
-                }
-                .input, .select, .ctrl{
-                  display:block;
-                  width:100%;
-                  height:var(--inpH);
-                  font-size:var(--font);
-                  border-radius:var(--radius);
-                  padding:0 16px;
-                  border:1px solid #c8d6f0;
-                  background:#fff;
-                  outline:none;
-                }
-
-                /* 4) 달력 박스가 튀어나오는 현상 제거 */
-                .ctrl{ position:relative; overflow:hidden; }   /* 테두리 끊김/넘침 방지 */
-                .ctrl--dob{ padding-right:110px; }             /* 배지+아이콘 공간 */
-                .badge--dob{ position:absolute; right:54px; top:50%; transform:translateY(-50%); }
-                .iconBtn--dob{ position:absolute; right:12px; top:50%; transform:translateY(-50%); }
-                .input--ghost{ flex:1; height:100%; border:none; background:transparent; padding:0; }
-
-                /* flatpickr 기본 스타일이 너비/보더를 건드리지 않게 리셋 */
-                .flatpickr-input{
-                  width:100% !important;
-                  border:none !important;
-                  box-shadow:none !important;
-                  background:transparent !important;
-                }
-
-                /* 5) 컬럼/행 간격 넉넉히 */
-                .grid{
-                  grid-template-columns: repeat(2, minmax(0,1fr));
-                  column-gap: 36px;   /* 좌우 간격 */
-                  row-gap: 28px;      /* 상하 간격 */
-                }
-                .spacer{ grid-column:1 / -1; height: 10px; }   /* 성별/생일 ↔ 키/몸무게 사이 여백 */
+      <style>{`
+        *, *::before, *::after { box-sizing: border-box; }
+        .grid > * { min-width: 0; }
+        .grid > label { display:block; }
 
         :root{
           --radius:16px; --inpH:56px; --font:16px; --label:13px;
           --stroke:#c8d6f0; --stroke2:#99b6f0; --text:#0f1b2d; --muted:#667085;
           --brand:#112a66; --brand-hover:#173a8e;
           --chip-bg:rgba(13,110,253,.08); --chip-stroke:rgba(13,110,253,.18); --chip-fg:#0b5cab;
-          --gap-col:15px; --gap-row:15px;
+          --gap-col:15px; --gap-row:10px;
         }
         .page{ min-height:100vh; display:flex; flex-direction:column; align-items:center;
                background:linear-gradient(180deg,#e8f0ff 0%,#ffffff 100%); padding:32px 16px; text-align:center; }
@@ -193,7 +195,6 @@ export default function Start() {
         .input:focus, .select:focus, .ctrl:focus-within{
           border-color:var(--stroke2); box-shadow:0 0 0 4px rgba(68,132,255,.15);
         }
-        .grid > label { display:block; margin-bottom:2px; }
 
         .select{
           appearance:none;
@@ -202,11 +203,10 @@ export default function Start() {
           background-size:5px 5px, 5px 5px; background-repeat:no-repeat; padding-right:40px;
         }
 
-        /* DOB 래퍼: 절대배치 + overflow:hidden 으로 테두리 깨짐 방지 */
-        .ctrl{ display:flex; align-items:center; position:relative; overflow:hidden; }
-        .input--ghost{ height:100%; border:none; padding:0; flex:1; font-size:var(--font); background:transparent; }
-        /* flatpickr가 주입하는 기본 스타일 완전 리셋 */
-        .flatpickr-input{ border:none !important; box-shadow:none !important; background:transparent !important; }
+        .ctrl{ position:relative; overflow:hidden; display:flex; align-items:center; }
+        .ctrl--dob{ padding-right:110px; }
+        .input--ghost{ flex:1; height:100%; border:none; background:transparent; padding:0; }
+        .flatpickr-input{ width:100% !important; border:none !important; box-shadow:none !important; background:transparent !important; }
 
         .iconBtn{ width:36px; height:36px; border-radius:10px; border:none; background:transparent; cursor:pointer;
                   display:inline-flex; align-items:center; justify-content:center; }
@@ -214,11 +214,10 @@ export default function Start() {
         .badge{ font-weight:800; color:var(--chip-fg); background:var(--chip-bg); border:1px solid var(--chip-stroke);
                 padding:6px 10px; border-radius:999px; white-space:nowrap; font-size:12px; }
         .badge--dob{ position:absolute; right:54px; top:50%; transform:translateY(-50%); }
-        .ctrl--dob{ padding-right:110px; } /* 배지(약 56) + 아이콘(36) + 여유 */
 
         .spacer{ grid-column:1 / -1; height:28px }
 
-        .btn{ width:100%; margin-top:32px; height:56px; border-radius:20px; border:none; cursor:pointer;
+        .btn{ width:100%; margin-top:24px; height:56px; border-radius:20px; border:none; cursor:pointer;
               background:var(--brand); color:#fff; font-weight:900; font-size:1.05rem;
               box-shadow:0 12px 28px rgba(0,0,0,.15); transition:background .12s ease; }
         .btn:hover{ background:var(--brand-hover) }
@@ -226,6 +225,25 @@ export default function Start() {
         .hint{ margin-top:12px; color:var(--muted); font-size:12px }
         .error{ margin-bottom:16px; padding:12px 14px; border-radius:12px;
                 border:1px solid #f2b8b5; background:#fdeceb; color:#b42318; font-size:13px }
+
+        /* ── 모달 ── */
+        .modalBackdrop{
+          position:fixed; inset:0; background:rgba(0,0,0,.45);
+          display:flex; align-items:center; justify-content:center; padding:20px; z-index:1000;
+        }
+        .modalCard{
+          width:min(640px, 94vw); background:#fff; border-radius:20px; padding:22px 22px 18px;
+          box-shadow:0 24px 80px rgba(0,0,0,.25);
+        }
+        .modalTitle{ margin:0 0 6px; font-size:20px; font-weight:900; color:#0b1a33 }
+        .modalDesc{ margin:0 0 12px; color:#334e68; font-size:14px }
+        .modalUidRow{ display:flex; align-items:center; gap:10px; margin:12px 0 18px }
+        .modalUid{ flex:1; font-family: ui-monospace, Menlo, monospace; font-size:14px; background:#f4f7ff;
+                   padding:10px 12px; border-radius:12px; color:#0b5cab; border:1px solid #d9e3ff; }
+        .modalCopy{ border:none; border-radius:12px; padding:10px 14px; cursor:pointer; background:#e7eeff; color:#0b5cab; font-weight:900 }
+        .modalCopy:hover{ filter:brightness(.96); }
+        .modalOk{ width:100%; height:48px; border:none; border-radius:14px; cursor:pointer; background:#112a66; color:#fff; font-weight:900 }
+        .modalOk:hover{ background:#173a8e }
       `}</style>
 
       <h1 className="title">국민체력 100 간편측정</h1>
@@ -233,6 +251,8 @@ export default function Start() {
 
       <form className="card" onSubmit={handleStart}>
         {err && <div className="error">{err}</div>}
+
+        {/* ✅ 기본 화면에서 id 배지는 표시하지 않음 */}
 
         <div className="grid">
           <label style={{ gridColumn: "1 / -1" }}>
@@ -301,12 +321,19 @@ export default function Start() {
           {loading ? "저장 중…" : "다음 단계로 이동"}
         </button>
 
-        <p className="hint">입력값은 브라우저 로컬과 앱 상태에 저장되며, userId는 서버에서 1회 발급됩니다.</p>
+        <p className="hint">입력값은 브라우저 로컬과 앱 상태에 저장되며, id는 서버에서 1회 발급됩니다.</p>
       </form>
 
       <p style={{ marginTop: 18, color: "#666", fontSize: "0.9rem" }}>
         AI 피트니스 코칭 기반 국민체력 100 간이 측정 서비스
       </p>
+
+      {/* ✅ 발급 직후에만 모달 표시 */}
+      <IdModal
+        open={showIdModal}
+        id={visibleId}
+        onConfirm={() => nav("/survey1")}
+      />
     </div>
   );
 }

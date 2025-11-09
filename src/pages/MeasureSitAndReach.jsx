@@ -561,7 +561,6 @@ export default function MeasureSitAndReach() {
             boxShadow: "0 12px 28px rgba(0,0,0,.35)",
           }}
         >
-          <Metric label="FPS" value={hudFps} />
           <Metric
             label="카메라 각도"
             value={`${Number.isFinite(yawDeg) ? Math.round(yawDeg) : "—"}°`}
@@ -573,7 +572,6 @@ export default function MeasureSitAndReach() {
             value={`${sideCount}/6`}
             dot={sideCount >= 6 ? "#22c55e" : "#ef4444"}
           />
-          <Metric label="측정 사이드" value={whichSide} />
           <Metric
             label="현재"
             value={`${currentReachCm >= 0 ? "+" : ""}${currentReachCm.toFixed(1)} cm`}
