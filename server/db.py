@@ -10,6 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent  # <프로젝트 루트> = ser
 def _mk_sqlite_url(db_path: Path) -> str:
     return f"sqlite:////{db_path}" if db_path.is_absolute() else f"sqlite:///{db_path}"
 
+    
 def _decide_database_url() -> str:
     env_path = os.getenv("SERVER_DB_PATH")
     if env_path:

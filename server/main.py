@@ -5,7 +5,9 @@ from uuid import uuid4
 from typing import Any, Dict
 import json
 import traceback
-
+from pathlib import Path          # <-- 추가
+import sqlite3, os  
+from routers import review  # ✅ 추가
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -35,8 +37,26 @@ app.add_middleware(
 
 # DB 테이블 자동 생성
 Base.metadata.create_all(bind=engine)
-
-
+DB_FILE = os.getenv("SERVER_DB_PATH") or str(
+    Path(__file__).resolve().parent.parent / "data" / "server.db"
+)
+@app.get("/_debug/dbinfo")
+def dbinfo():
+    p = Path(DB_FILE)
+    exists = p.exists()
+    size = p.stat().st_size if exists else 0
+    # 안전 확인용: results 테이블 유무/카운트
+    count = None
+    try:
+        conn = sqlite3.connect(DB_FILE); cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='results'")
+        has = cur.fetchone() is not None
+        if has:
+            count = cur.execute("SELECT COUNT(*) FROM results").fetchone()[0]
+        conn.close()
+    except Exception as e:
+        count = f"error: {e}"
+    return {"path": str(p.resolve()), "exists": exists, "bytes": size, "results_count": count}
 # ───────────── 이벤트 핸들러 ─────────────
 @app.on_event("startup")
 def _startup_rag():

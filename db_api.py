@@ -288,3 +288,25 @@ def update_result(key: str, payload: dict = Body(...)):
     conn.close()
 
     return {"ok": True, "updated": updated, "id": str(rid)}
+@app.get("/_debug/dbinfo")
+def dbinfo():
+    p = Path(DB_PATH)
+    exists = p.exists()
+    size = p.stat().st_size if exists else 0
+    count = None
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='results'")
+        has = cur.fetchone() is not None
+        if has:
+            count = cur.execute("SELECT COUNT(*) FROM results").fetchone()[0]
+        conn.close()
+    except Exception as e:
+        count = f"error: {e}"
+    return {
+        "path": str(p.resolve()),
+        "exists": exists,
+        "bytes": size,
+        "results_count": count,
+    }
