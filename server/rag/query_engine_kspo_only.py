@@ -38,7 +38,8 @@ def _get_openai_client() -> OpenAI:
     org_id   = (os.getenv("OPENAI_ORG_ID") or "").strip() or None
 
     proxy = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY")
-    http_client = httpx.Client(proxies=proxy, timeout=30.0) if proxy else None
+    # httpx ≥ 0.28: 'proxy=' 사용
+    http_client = httpx.Client(proxy=proxy, timeout=30.0) if proxy else None
 
     __openai_client = OpenAI(
         api_key=api_key,
