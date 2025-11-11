@@ -44,7 +44,7 @@ const router = createBrowserRouter([
       { path: "survey4", element: <Survey4 /> },
 
       { path: "review", element: <Review /> },
-      { path: "/my", element: <MyResult /> },
+      { path: "my", element: <MyResult /> },
   // ⬅️ 라우트 추가
 
     ],
