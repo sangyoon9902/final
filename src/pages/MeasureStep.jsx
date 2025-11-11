@@ -324,7 +324,7 @@ export default function MeasureStep() {
             <Pill>
               모드:{" "}
               <select value={mode} onChange={e=>setMode(e.target.value)} style={{ background:"transparent", color:"#fff", border:"none" }}>
-                <option value="auto">자동(Pulsoid)</option>
+                <option value="auto">자동(워치연결)</option>
                 <option value="manual">수동 입력</option>
               </select>
             </Pill>
@@ -341,9 +341,9 @@ export default function MeasureStep() {
               disabled={mode!=="auto" || connectStatus==="connecting"}
             >
               {mode!=="auto" && "수동 모드"}
-              {mode==="auto" && connectStatus==="idle" && "Pulsoid 연결"}
+              {mode==="auto" && connectStatus==="idle" && "워치 연결"}
               {mode==="auto" && connectStatus==="connecting" && "연결 중..."}
-              {mode==="auto" && connectStatus==="connected" && "Pulsoid 연결됨 ✅"}
+              {mode==="auto" && connectStatus==="connected" && "워치 연결됨 ✅"}
               {mode==="auto" && connectStatus==="error" && "연결 실패(다시 시도)"}
             </Button>
 
@@ -353,7 +353,7 @@ export default function MeasureStep() {
                 type="number"
                 value={manualResting}
                 onChange={e=>setManualResting(e.target.value)}
-                placeholder="안정심박 (≤100)"
+                placeholder="안정심박 (100bpm 이하)"
                 style={{ background:"#111", color:"#fff", border:"1px solid #444", borderRadius:8, padding:"8px 10px", width:150 }}
               />
             )}
@@ -398,18 +398,24 @@ export default function MeasureStep() {
 }
 
 /* ───────────────────────── 예쁜 안내 리본 ───────────────────────── */
+/* ───────────────────────── 예쁜 안내 리본 (모드별 말미 스텝 분기) ───────────────────────── */
 function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
-  // 단계 정의
-  const steps = [
+  // 공통 앞단 스텝
+  const baseSteps = [
     { id: "connect",  label: "연결/입력" },
-    { id: "guide",    label: "28초 안내" },
-    { id: "stepping", label: "3분 스텝" },
+    { id: "guide",    label: "안내" },
+    { id: "stepping", label: "3분 스텝검사" },
     { id: "rest",     label: "1분 휴식" },
-    { id: "manual",   label: "(수동)10초×6" },
-    { id: "auto",     label: "(자동)1분 후 HR" },
   ];
 
-  // 현재 단계
+  // 모드별 말미 스텝 추가
+  const tailStep = mode === "manual"
+    ? { id: "manual", label: "10초 심박수 측정" }
+    : { id: "auto",   label: "심박수 자동 측정" };
+
+  const steps = [...baseSteps, tailStep];
+
+  // 현재 단계 → 리본 id 매핑
   const currentId =
     phase === "idle"          ? "connect"  :
     phase === "prestep"       ? "guide"    :
@@ -417,44 +423,42 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
     phase === "recovery"      ? "rest"     :
     phase === "count10"       ? "manual"   :
     phase === "count10_done"  ? "manual"   :
-    phase === "done"          ? "auto"     : "connect";
+    phase === "done"          ? (mode === "manual" ? "manual" : "auto")
+                              : "connect";
 
   const indexOf = (id) => steps.findIndex(s => s.id === id);
   const currentIdx = Math.max(0, indexOf(currentId));
 
-  // 진행률 (0~1)
-  let localProgress = 0; // 해당 단계 내 진행률
+  // 단계 내 진행률(로컬)
+  let localProgress = 0;
   if (phase === "prestep") {
-    // 28초 안내
-    const elapsed = Math.min(GUIDE_SEC, GUIDE_SEC - Math.max(0, GUIDE_SEC)); // 고정 안내: 애니메이션만
-    localProgress = elapsed / GUIDE_SEC || 0.01; // 살짝 흘러가는 느낌
+    // 안내 28초: 살짝 진행감만
+    localProgress = 0.2;
   } else if (phase === "stepping") {
     localProgress = 1 - (stepTimer / STEP_STEPPING_SEC);
   } else if (phase === "recovery") {
     localProgress = 1 - (recoveryTimer / STEP_RECOVERY_SEC);
   } else if (phase === "count10") {
     localProgress = 1 - (count10Timer / 10);
-  } else if (phase === "count10_done") {
-    localProgress = 1;
-  } else if (phase === "done") {
+  } else if (phase === "count10_done" || phase === "done") {
     localProgress = 1;
   }
 
-  const totalProgress = (currentIdx + localProgress) / (steps.length - 1);
+  const denom = Math.max(1, steps.length - 1);
+  const totalProgress = (currentIdx + localProgress) / denom;
 
   // 우측 상태 텍스트
   const rightText =
-    phase === "idle"         ? "준비 완료되면 ‘스텝검사 시작’을 눌러주세요" :
+    phase === "idle"         ? "준비되면 ‘스텝검사 시작’을 눌러주세요" :
     phase === "prestep"      ? "안내 중…" :
     phase === "stepping"     ? `스텝 남은 시간 ${formatMMSS(stepTimer)}` :
     phase === "recovery"     ? `휴식 남은 시간 ${formatMMSS(recoveryTimer)}` :
-    phase === "count10"      ? `10초 카운트 남은 00:${String(count10Timer).padStart(2,"0")}` :
-    phase === "count10_done" ? "방금 센 박동 수를 입력해주세요" :
+    (mode === "manual" && phase === "count10")      ? `10초 카운트 남은 00:${String(count10Timer).padStart(2,"0")}` :
+    (mode === "manual" && phase === "count10_done") ? "방금 센 박동 수를 입력해주세요" :
     phase === "done"         ? "측정 완료 ✅" : "";
 
   return (
     <div style={{ marginBottom: 12 }}>
-      {/* 리본 배경 */}
       <div style={{
         position: "relative",
         borderRadius: 14,
@@ -463,7 +467,7 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
         border: "1px solid rgba(255,255,255,0.10)",
         boxShadow: "0 12px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)"
       }}>
-        {/* 상단: 제목 + 모드 배지 */}
+        {/* 타이틀 + 모드 배지 */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
             <span style={{ fontSize:16, fontWeight:800, letterSpacing:0.2, color:"#eaeefb" }}>스텝검사 진행</span>
@@ -471,20 +475,18 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
               fontSize:12, fontWeight:700, padding:"6px 10px", borderRadius:999,
               background:"rgba(80,120,255,0.18)", border:"1px solid rgba(120,160,255,0.35)", color:"#cdd7ff"
             }}>
-              {mode === "auto" ? "자동모드: 1분 후 HR 기록" : "수동모드: 10초 × 6 카운트"}
+              {mode === "auto" ? "자동모드" : "수동모드"}
             </span>
           </div>
           <span style={{ fontSize:12, opacity:0.85 }}>{rightText}</span>
         </div>
 
-        {/* 타임라인 */}
+        {/* 진행 바 */}
         <div style={{ position:"relative", padding:"10px 0 4px" }}>
-          {/* 베이스 라인 */}
           <div style={{
             position:"absolute", left:8, right:8, top:"50%", height:4, transform:"translateY(-50%)",
             background:"rgba(255,255,255,0.08)", borderRadius:4
           }} />
-          {/* 진행 라인 */}
           <div style={{
             position:"absolute", left:8, right:`calc(8px + ${(1-totalProgress)*100}%)`, top:"50%", height:4,
             transform:"translateY(-50%)",
@@ -494,7 +496,7 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
             transition:"right 300ms ease"
           }} />
 
-          {/* 노드들 */}
+          {/* 노드 */}
           <div style={{ display:"grid", gridTemplateColumns:`repeat(${steps.length}, 1fr)`, gap:0, position:"relative" }}>
             {steps.map((s, idx) => {
               const active = idx <= currentIdx;
@@ -527,6 +529,7 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
     </div>
   );
 }
+
 
 /* ───────────────────────── 기타 UI ───────────────────────── */
 function Pill({children}) {

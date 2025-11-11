@@ -48,7 +48,7 @@ export default function App() {
           <NavBtn to="/survey4">설문4</NavBtn>
           {/* /measure/* 에 있을 때도 활성화되도록 activeOverride 전달 */}
           <NavBtn to="/select" activeOverride={inMeasure}>{selectLabel}</NavBtn>
-          <NavBtn to="/results">결과</NavBtn>
+          <NavBtn to="/results">AI 운동처방</NavBtn>
         </nav>
       </header>
 

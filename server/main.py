@@ -142,7 +142,12 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
             id=str(uuid4()),
             user_id=user_id,
             trace_id=trace_id,
-            status="final",
+            # ✅ 기본값은 ready, 바디에 유효한 status가 오면 그걸 사용
+            status=(
+               (received.get("status") or "").strip().lower()
+               if (received.get("status") or "").strip().lower() in {"ready","review","final"}
+              else "ready"
+           ),
             user_json=received.get("user"),
             surveys_json=received.get("surveys"),
             measurements_json=received.get("measurements"),
