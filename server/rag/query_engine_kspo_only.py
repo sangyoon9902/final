@@ -405,7 +405,7 @@ def call_openai(system_prompt: str, user_prompt: str) -> str:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.6,
+            temperature=0.4,
             max_tokens=1200,
         )
         return (completion.choices[0].message.content or "").strip()
@@ -756,37 +756,7 @@ def _surveys_to_md(payload: Dict[str, Any]) -> str:
 
 
 
-# === NEW: LLM 기반 설문 맞춤 ACSM6 조언 ======================================
-# === REPLACE: LLM 기반 설문 맞춤 ACSM6 조언 ====================================
-def _advice_from_surveys_llm(payload: Dict[str, Any], acsm_cands: List[Dict[str, Any]]) -> str:
-    """
-    Survey1/4 → 안전·주의/금기·자각증상 대응
-    Survey2/3 → 동기/장벽, 활동수준(IPAQ) 기반 행동전략·목표 설계
-    출력은 섹션화하고, 적절한 [ACSM6:doc_id] 인용 포함.
-    """
-    surveys_md = _surveys_to_md(payload)
-
-    def _short(s: str, n: int = 400) -> str:
-        s = (s or "").strip()
-        return (s[:n].rstrip()+"…") if len(s) > n else s
-
-    acsm_lines = []
-    for c in (acsm_cands or []):
-        did = c.get("doc_id") or "ACSM6:UNK"
-        ttl = c.get("title") or "(제목 없음)"
-        exc = _short(c.get("excerpt") or "")
-        kws = ", ".join(c.get("keywords") or [])
-        acsm_lines.append(f"- {did} | {ttl}\n  - keywords: {kws}\n  - excerpt: {exc}")
-    acsm_md = "\n".join(acsm_lines) if acsm_lines else "(ACSM6 후보 없음)"
-
-    system_prompt = (
-        "당신은 임상 운동전문가이자 **ACSM 제6판(ACSM6)** 기반 코치입니다. "
-        "사용자 맞춤 **실행가능 조언**을 한국어로 제공합니다. "
-        "모든 권고는 안전을 최우선으로 합니다. "
-        "과장된 의학적 단정은 피하고, 위험 신호 시 즉시 중단/전문가 상담을 권고합니다."
-    )
-
-    # === REPLACE: LLM 기반 설문 맞춤 ACSM6 조언 ====================================
+ # === LLM 기반 설문 맞춤 ACSM6 조언 ======================================
 def _advice_from_surveys_llm(payload: Dict[str, Any], acsm_cands: List[Dict[str, Any]]) -> str:
     """
     Survey1/4 → 안전·주의/금기·자각증상 대응
@@ -830,30 +800,26 @@ def _advice_from_surveys_llm(payload: Dict[str, Any], acsm_cands: List[Dict[str,
         "\n"
         "2) 목표·동기·실행 전략 (설문2·3 기반)\n"
         "   - 설문2의 운동 목적, 과거 운동경험, 운동 지속의 어려움을 반영하여 **목표 달성 및 동기유지 전략**을 작성한다.\n"
-        "   - 설문3(IPAQ)의 신체활동 수준(빈도·시간·좌식시간·운동장소 등)을 함께 분석하여 **실행 가능성·행동 조정 팁**을 포함한다.\n"
+        "   - 설문3(IPAQ)의 신체활동 수준(빈도·시간·좌식시간 등)을 함께 분석하여 **실행 가능성·행동 조정 팁**을 포함한다.\n"
         "   - 신체활동 시간이 부족할 경우, 생활 속 활동량을 늘리는 구체적 방안을 제시한다.\n"
         "   - 신체활동 시간이 충분할 경우, 현재의 노력을 긍정적으로 강화(칭찬·격려)하는 피드백을 제공한다.\n"
-
         "\n"
         "### 출력 형식 (마크다운)\n"
         "#### 사용자 진단\n"
         "- ‘예’ 문항 매핑표\n"
         "{각 예 문항마다 아래 템플릿 반복}\n"
-        "- **상태:** {설문 질문을 자연어 문장으로 변환 — 예: '심장 이상 증상이 있으신 것으로 판단됩니다.'}\n"
-        "  - **근거/위험:** {주의가 필요한 이유(생리·임상적 근거)}\n"
-        "  - **즉시 적용 조치:** {강도·빈도·볼륨·세트·휴식 등 구체 수치/범위}\n"
-        "  - **대체/수정 운동:** {금기/주의 동작 → 대체 가능한 패턴, ROM·호흡·템포 큐}\n"
+        "- **상태:** {문항을 자연어로 요약}\n"
+        "  - **근거/위험:** {주의가 필요한 이유}\n"
+        "  - **즉시 적용 조치:** {강도/빈도/볼륨/휴식 등 구체 수치}\n"
+        "  - **대체/수정 운동:** {금기/주의 동작의 대안}\n"
         "\n"
         "#### 사용자 맞춤 전략\n"
-        "- **사용자 요약:** {설문2 운동 목적/과거 경험/운동 어려움 요약}\n"
-        "  - **격려 메시지:** {설문2에서 선택한 운동 목적을 달성할 수 있도록 동기 부여}\n"
-        "  - **장벽 극복 팁:** {설문2에서 선택한 어려움 해결 방안 제시}\n"
-        "- **활동수준 요약:** {설문3(IPAQ) 기반 — 주당 빈도, 평균 운동 시간, 좌식시간 등}\n"
-        "  - **실행 피드백:** {설문3 결과에 따라 부족 시 개선 팁 / 충분 시 긍정 피드백 제공}\n"
+        "- **사용자 요약:** {설문2 요약}\n"
+        "  - **격려 메시지:** {동기 강화}\n"
+        "  - **장벽 극복 팁:** {해결 방안}\n"
+        "- **활동수준 요약:** {설문3 요약}\n"
+        "  - **실행 피드백:** {부족/충분에 따른 조언}\n"
     )
-
-
-
 
     ans = call_openai(system_prompt, user_prompt)
     if not ans or ans.startswith("⚠️ LLM 호출 중 오류"):

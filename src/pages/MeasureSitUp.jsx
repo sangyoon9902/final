@@ -1,5 +1,6 @@
 // src/pages/MeasureSitup.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
+
 import { useNavigate } from "react-router-dom";
 
 // 1) 로직/상태 훅
@@ -40,19 +41,41 @@ function SitupFlowRibbon({ phase, countdown }) {
   const indexOf = (id) => steps.findIndex(s => s.id === id);
   const currentIdx = Math.max(0, indexOf(currentId));
 
-  let localProgress = 0;
-  if (phase === "guide") localProgress = 0.5;
-  else if (phase === "countdown") localProgress = (5 - countdown) / 5;
-  else if (phase === "running") localProgress = 0.5;
-  else if (phase === "finished") localProgress = 1;
-
-  const totalProgress = (currentIdx + localProgress) / (steps.length - 1);
-
   const rightText =
     phase === "guide"     ? "카메라에 자세를 맞춰주세요" :
     phase === "countdown" ? `곧 시작: ${countdown}` :
     phase === "running"   ? "측정 중... (움직임이 없으면 4초 후 자동 종료)" :
     phase === "finished"  ? "측정 완료 ✅" : "";
+
+  // ✅ DOM 측정용 refs
+  const trackRef = useRef(null);
+  const stepRefs = useRef([]);   // 각 점 컨테이너 ref
+  const [fillPx, setFillPx] = useState(0);
+
+  // ✅ 점의 '중심'까지 정확히 채우기
+  useLayoutEffect(() => {
+    function measure() {
+      const trackRect = trackRef.current?.getBoundingClientRect?.();
+      const dotRect = stepRefs.current[currentIdx]?.getBoundingClientRect?.();
+      if (!trackRect || !dotRect) return;
+
+      // 점 중심
+      const centerX = dotRect.left + dotRect.width / 2;
+      // 좌측 패딩(left: 8px)을 고려한 실제 채움 너비(px)
+      const width = Math.max(0, Math.min(trackRect.width, centerX - trackRect.left));
+      setFillPx(width);
+    }
+    measure();
+
+    // 반응형 대응
+    const ro = new ResizeObserver(measure);
+    if (trackRef.current) ro.observe(trackRef.current);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [currentIdx]);
 
   return (
     <div>
@@ -70,25 +93,34 @@ function SitupFlowRibbon({ phase, countdown }) {
           </span>
           <span style={{ fontSize:12, opacity:0.85 }}>{rightText}</span>
         </div>
-        <div style={{ position:"relative", padding:"10px 0 4px" }}>
+
+        <div ref={trackRef} style={{ position:"relative", padding:"10px 0 4px" }}>
+          {/* 베이스 라인 */}
           <div style={{
             position:"absolute", left:8, right:8, top:"50%", height:4, transform:"translateY(-50%)",
             background:"rgba(255,255,255,0.08)", borderRadius:4
           }} />
+          {/* ✅ 채움 라인: 점 중심까지 정확히 */}
           <div style={{
-            position:"absolute", left:8, right:`calc(8px + ${(1-totalProgress)*100}%)`, top:"50%", height:4,
-            transform:"translateY(-50%)",
+            position:"absolute", left:8, top:"50%", height:4, transform:"translateY(-50%)",
+            width: `${Math.max(0, fillPx - 8)}px`,   // left:8px 보정
             background:"linear-gradient(90deg, #60a5fa, #34d399)",
             boxShadow:"0 0 14px rgba(56,189,248,0.35)",
             borderRadius:4,
-            transition:"right 300ms ease"
+            transition:"width 180ms ease"
           }} />
+
+          {/* 단계 점 + 라벨 */}
           <div style={{ display:"grid", gridTemplateColumns:`repeat(${steps.length}, 1fr)`, gap:0, position:"relative" }}>
             {steps.map((s, idx) => {
               const active = idx <= currentIdx;
               const current = idx === currentIdx;
               return (
-                <div key={s.id} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+                <div
+                  key={s.id}
+                  ref={(el) => (stepRefs.current[idx] = el)}
+                  style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}
+                >
                   <div style={{
                     width: current ? 18 : 14, height: current ? 18 : 14,
                     borderRadius:"50%",

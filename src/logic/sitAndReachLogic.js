@@ -13,8 +13,8 @@ export const IDX = {
   R_INDEX: 20,   // 손끝(검지)
   L_HIP: 23,
   R_HIP: 24,
-  L_ANK: 27,     // 발목
-  R_ANK: 28,
+  L_ANK: 27,     // 발목 (측정에는 사용 안 함)
+  R_ANK: 28,     // 발목 (측정에는 사용 안 함)
   L_FOOT: 31,    // 발끝
   R_FOOT: 32,    // 발끝
 };
@@ -40,76 +40,143 @@ export function angleOKForReach(yaw, yawMin = 85, yawMax = 95) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 사이드(Left/Right) 선택: 가시성 점수로 자동 선택
+// 사이드(Left/Right) 선택: **손끝/발끝/엉덩이** 가시성으로만 선택
 // ─────────────────────────────────────────────────────────────
 function vis(p) { return (p?.visibility ?? 0); }
 
 export function chooseDominantSide(lms) {
   if (!lms?.length) return { side: null, scoreL: 0, scoreR: 0 };
 
-  const scoreL = vis(lms[IDX.L_INDEX]) + vis(lms[IDX.L_WRIST]) +
-                 vis(lms[IDX.L_FOOT])  + vis(lms[IDX.L_ANK])   +
-                 vis(lms[IDX.L_HIP]);
-  const scoreR = vis(lms[IDX.R_INDEX]) + vis(lms[IDX.R_WRIST]) +
-                 vis(lms[IDX.R_FOOT])  + vis(lms[IDX.R_ANK])   +
-                 vis(lms[IDX.R_HIP]);
+  const scoreL = vis(lms[IDX.L_INDEX]) + vis(lms[IDX.L_FOOT]) + vis(lms[IDX.L_HIP]);
+  const scoreR = vis(lms[IDX.R_INDEX]) + vis(lms[IDX.R_FOOT]) + vis(lms[IDX.R_HIP]);
 
   const side = (scoreL === 0 && scoreR === 0) ? null : (scoreL >= scoreR ? "L" : "R");
   return { side, scoreL, scoreR };
 }
 
-// 내부 헬퍼: 보이는 포인트의 x, 안 보이면 대체 포인트 x
-function pickX(p, alt, visTh = 0.35) {
-  if (p && (p.visibility ?? 0) >= visTh) return p.x;
-  if (alt && (alt.visibility ?? 0) >= visTh) return alt.x;
-  return null;
+// ─────────────────────────────────────────────────────────────
+// 발끝 X 앵커(히스테리시스: 근접 시 락인, 멀어지면 해제)
+//  - lockInNearCm: 이 값 '이상'(>=)이면 손이 발끝 근처 → 고정 시작
+//  - releaseFarCm: 이 값 '이하'(<=)이면 손이 다시 멀어짐 → 고정 해제
+//  - maxAgeMs: 고정값을 너무 오래 끌고가지 않도록 안전 갱신
+// ─────────────────────────────────────────────────────────────
+const FOOT_VIS_TH = 0.45;
+
+function makeFootAnchor({
+  lockInNearCm = -20,
+  releaseFarCm = -30,
+  maxAgeMs = 5000,
+} = {}) {
+  const state = {
+    L: { locked:false, x:null, ts:0 },
+    R: { locked:false, x:null, ts:0 },
+  };
+
+  function valueFor(side, footP) {
+    const s = state[side];
+    if (s.locked && Number.isFinite(s.x)) return s.x;
+    return footP?.x ?? null;
+    // 주의: locked가 아니면 항상 최신 관측값 사용
+  }
+
+  function update(side, { cmCandidate, footP }) {
+    const s = state[side];
+    const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+
+    // 🔒 Lock-in: 손이 근접 구간(>= lockInNearCm)이고 발끝이 보이는 프레임이면 고정
+    if (!s.locked && cmCandidate >= lockInNearCm && footP && (footP.visibility ?? 0) >= FOOT_VIS_TH) {
+      s.locked = true; s.x = footP.x; s.ts = now; return;
+    }
+
+    // 🔓 Release: 손이 충분히 멀어진 구간(<= releaseFarCm)이면 해제
+    if (s.locked && cmCandidate <= releaseFarCm) {
+      s.locked = false; s.x = null; s.ts = 0; return;
+    }
+
+    // 안전 갱신: 너무 오래 고정되었고, 발끝이 충분히 보이면 고정 좌표 업데이트
+    if (s.locked && (now - s.ts > maxAgeMs) && footP && (footP.visibility ?? 0) >= FOOT_VIS_TH) {
+      s.x = footP.x; s.ts = now;
+    }
+  }
+
+  function isAnchored(side) {
+    return !!state[side]?.locked;
+  }
+
+  function reset() {
+    state.L = { locked:false, x:null, ts:0 };
+    state.R = { locked:false, x:null, ts:0 };
+  }
+
+  return { valueFor, update, isAnchored, reset };
 }
+
+// 모듈 생애주기 동안 유지되는 싱글톤 앵커
+export const footAnchor = makeFootAnchor();
 
 // ─────────────────────────────────────────────────────────────
 /**
  * [한쪽 사이드만] 좌전굴 "전방 X 성분"(부호 포함, cm) 계산
  *  + : 손끝이 발끝 "넘김", 0 : "닿음", - : "못 미침"
- *  - 출력: { cm, side, ok }
+ *  - 출력: { cm, side, ok, anchored }
+ *  - 조건:
+ *     - 손끝(검지)은 visibility ≥ 0.45 필요
+ *     - 발끝은 "보이거나(visibility OK) 또는 앵커 ON"이면 OK
  */
 // ─────────────────────────────────────────────────────────────
 export function estimateForwardReachSignedCmX_oneSide(lms, userHeightCm = 170) {
   if (!lms?.length || !Number.isFinite(userHeightCm) || userHeightCm <= 0) {
-    return { cm: 0, side: null, ok: false };
+    return { cm: 0, side: null, ok: false, anchored: false };
   }
 
   const { side } = chooseDominantSide(lms);
-  if (!side) return { cm: 0, side: null, ok: false };
+  if (!side) return { cm: 0, side: null, ok: false, anchored: false };
 
-  const HAND = (side === "L") ? IDX.L_INDEX : IDX.R_INDEX;
-  const WRIST = (side === "L") ? IDX.L_WRIST : IDX.R_WRIST;
-  const FOOT = (side === "L") ? IDX.L_FOOT  : IDX.R_FOOT;
-  const ANK  = (side === "L") ? IDX.L_ANK   : IDX.R_ANK;
+  const HAND = (side === "L") ? IDX.L_INDEX : IDX.R_INDEX; // 손끝만
+  const FOOT = (side === "L") ? IDX.L_FOOT  : IDX.R_FOOT;  // 발끝만
   const HIP  = (side === "L") ? IDX.L_HIP   : IDX.R_HIP;
 
-  const handX = pickX(lms[HAND], lms[WRIST]);
-  const footX = pickX(lms[FOOT], lms[ANK]);
-  const hipX  = lms[HIP]?.x ?? null;
-  if (handX == null || footX == null || hipX == null) {
-    return { cm: 0, side, ok: false };
+  const handP = lms[HAND];
+  const footP = lms[FOOT];
+  const hipP  = lms[HIP];
+
+  // 손은 반드시 보이고 좌표 존재
+  if (!handP || (handP.visibility ?? 0) < 0.45 || handP.x == null) {
+    return { cm: 0, side, ok: false, anchored: false };
+  }
+  if (!hipP || hipP.x == null) {
+    return { cm: 0, side, ok: false, anchored: false };
   }
 
-  const dir = Math.sign((footX - hipX) || 1e-6);       // 같은 사이드의 엉덩이→발 방향
-  const forwardNormX = dir * (handX - footX);          // 부호 포함 전방 X
-  const cm = forwardNormX * userHeightCm;              // 신장 기반 cm 환산
+  // 1) 현재 관측 발끝(or 기존 앵커)로 임시 cm 산출
+  const rawFootX = (footP && footP.x != null) ? footP.x : null;
+  const preFootX = rawFootX ?? footAnchor.valueFor(side, footP);
+  if (preFootX == null) return { cm: 0, side, ok: false, anchored: footAnchor.isAnchored(side) };
 
-  return { cm: Math.max(-80, Math.min(cm, 80)), side, ok: true }; // 안전 클램프
+  const dir_pre = Math.sign(((preFootX - hipP.x) || 1e-6));   // 엉덩이→발 방향
+  let cmCandidate = dir_pre * (handP.x - preFootX) * userHeightCm;
+  cmCandidate = Math.max(-120, Math.min(cmCandidate, 120));   // 중간 단계 클램프
+
+  // 2) 히스테리시스 업데이트 (근접>=-20 → 락인, 멀어짐<=-30 → 해제)
+  footAnchor.update(side, { cmCandidate, footP });
+
+  // 3) 실제 계산에서 앵커 우선 사용
+  const useFootX = footAnchor.isAnchored(side) ? footAnchor.valueFor(side, footP) : preFootX;
+
+  const dir = Math.sign(((useFootX - hipP.x) || 1e-6));
+  const forwardNormX = dir * (handP.x - useFootX);
+  const cm = Math.max(-80, Math.min(forwardNormX * userHeightCm, 80)); // 최종 안전 클램프
+
+  // ok: 손은 OK, 발은 (보이거나 앵커ON)이면 OK
+  const footVisibleOK = !!footP && (footP.visibility ?? 0) >= FOOT_VIS_TH;
+  const anchored = footAnchor.isAnchored(side);
+  const ok = footVisibleOK || anchored;
+
+  return { cm, side, ok, anchored };
 }
 
 // ─────────────────────────────────────────────────────────────
-// 피크-홀드 컨트롤러 (최대치에서 needSec 유지해야 완료)
-// - breakHold(): 홀드 카운트만 0으로(최대값/armed 유지)
-// ─────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────
-// 피크-홀드 컨트롤러 (최대치에서 needSec 유지해야 완료)
-// - 첫 유효 샘플을 baseline으로 설정(음수도 OK)
-// - baseline 대비 minIncrementToArm 만큼 개선되면 armed=true → 홀드 카운트 시작
-// - 유지구간 평균으로 best를 점진적으로 상향(스파이크 억제)
-// - breakHold(): 홀드 카운트만 0으로(최대값/armed 유지)
+// 피크-홀드 컨트롤러 (원본 로직 유지)
 // ─────────────────────────────────────────────────────────────
 export function makePeakHoldController({
   needSec = 3.0,
@@ -117,54 +184,44 @@ export function makePeakHoldController({
   tolCm = 1.0,
   minIncrementToArm = 0.5,
 } = {}) {
-  let best = null;        // ❗ 처음엔 미설정 (0이 아님) → 음수 baseline 허용
+  let best = null;
   let armed = false;
   let holdFrames = 0;
 
-  // 유지구간 평균(“버틴 값”으로 best를 올림)
   let holdSum = 0;
   let holdCount = 0;
 
   const NEED = Math.round(needSec * fps);
 
   function push(currentCm) {
-    // 방어
     if (!Number.isFinite(currentCm)) currentCm = 0;
 
-    // 1) 최초 샘플을 baseline으로 설정 (음수도 OK)
     if (best === null) {
       best = currentCm;
-      armed = false;      // 아직 arm 아님
+      armed = false;
       holdFrames = 0;
       holdSum = 0;
       holdCount = 0;
       return { bestCm: best, armed, holdSec: 0, done: false };
     }
 
-    // 2) 피크 갱신 로직
     if (currentCm > best + minIncrementToArm) {
-      // 충분히 개선 → arm 시작 및 홀드 초기화
       best = currentCm;
       armed = true;
       holdFrames = 0;
       holdSum = 0;
       holdCount = 0;
     } else if (currentCm > best) {
-      // 미세 개선은 즉시 반영 (arm 여부는 유지)
       best = currentCm;
     }
 
-    // 3) 홀드 판정 및 평균 기반 상향
     if (armed && currentCm >= best - tolCm) {
       holdFrames += 1;
       holdSum += currentCm;
       holdCount += 1;
-
-      // 유지 구간의 평균값이 best보다 크면 부드럽게 상향
       const avg = holdSum / Math.max(1, holdCount);
       if (avg > best) best = avg;
     } else {
-      // 피크 근처 이탈 → 홀드 카운트만 리셋 (최대값/armed 유지)
       holdFrames = 0;
       holdSum = 0;
       holdCount = 0;
@@ -175,14 +232,13 @@ export function makePeakHoldController({
   }
 
   function breakHold() {
-    // 프레이밍 깨지면 호출: 진행 일시정지 느낌 (최대/armed 유지)
     holdFrames = 0;
     holdSum = 0;
     holdCount = 0;
   }
 
   function reset() {
-    best = null;          // ❗ 다시 baseline부터
+    best = null;
     armed = false;
     holdFrames = 0;
     holdSum = 0;

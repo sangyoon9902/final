@@ -1,5 +1,5 @@
 // src/pages/MeasureSitAndReach.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../state/AppState";
 
@@ -8,6 +8,8 @@ import {
   estimateYawDeg,
   angleOKForReach,
   makePeakHoldController,
+  footAnchor,            // ✅ cleanup에서 reset
+  IDX as LOGIC_IDX,      // (필요 시 사용)
 } from "../logic/sitAndReachLogic.js";
 
 /* ───────────────────────── 공통 유틸: 값 변화시에만 setState ───────────────────────── */
@@ -37,23 +39,38 @@ const reachSteps = [
 ];
 
 function ReachFlowRibbon({ phase, holdAtPeakSec = "0.0" }) {
-  const currentId = phase === "running" ? "running" : phase === "finished" ? "finished" : "ready";
+  const currentId =
+    phase === "running" ? "running" :
+    phase === "finished" ? "finished" : "ready";
+
   const indexOf = (id) => reachSteps.findIndex((s) => s.id === id);
   const currentIdx = Math.max(0, indexOf(currentId));
 
-  let localProgress = 0;
-  if (phase === "ready") localProgress = 0.75;
-  else if (phase === "running") localProgress = Math.min(1, parseFloat(holdAtPeakSec) / 1.0);
-  else if (phase === "finished") localProgress = 1;
-
-  const totalProgress = (currentIdx + localProgress) / (reachSteps.length - 1);
-
   const rightText =
-    phase === "ready"
-      ? "Yaw 90° 근처 + 관절 6/6 인식되면 자동 시작"
-      : phase === "running"
-      ? `안정 1초 유지! (${holdAtPeakSec}s / 1.0s)`
-      : "측정 완료 ✅";
+    phase === "ready"   ? "" :
+    phase === "running" ? `안정 1초 유지! (${holdAtPeakSec}s / 1.0s)` :
+    "측정 완료 ✅";
+
+  // ✅ 트랙/점 실제 좌표로 "점 중심"까지 채움
+  const trackRef = useRef(null);
+  const stepRefs = useRef([]);
+  const [fillPx, setFillPx] = useState(0);
+
+  useLayoutEffect(() => {
+    function measure() {
+      const track = trackRef.current?.getBoundingClientRect?.();
+      const dot   = stepRefs.current[currentIdx]?.getBoundingClientRect?.();
+      if (!track || !dot) return;
+      const dotCenter = dot.left + dot.width / 2;
+      const widthPx = Math.max(0, Math.min(track.width, dotCenter - track.left));
+      setFillPx(widthPx);
+    }
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (trackRef.current) ro.observe(trackRef.current);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [currentIdx]);
 
   return (
     <div>
@@ -67,20 +84,33 @@ function ReachFlowRibbon({ phase, holdAtPeakSec = "0.0" }) {
           <span style={{ fontSize:16, fontWeight:800, letterSpacing:0.2, color:"#eaeefb" }}>앉아 윗몸 굽히기</span>
           <span style={{ fontSize:12, opacity:0.85 }}>{rightText}</span>
         </div>
-        <div style={{ position:"relative", padding:"10px 0 4px" }}>
-          <div style={{ position:"absolute", left:8, right:8, top:"50%", height:4, transform:"translateY(-50%)",
-                        background:"rgba(255,255,255,0.08)", borderRadius:4 }} />
+
+        <div ref={trackRef} style={{ position:"relative", padding:"10px 0 4px" }}>
+          {/* 베이스 라인 */}
           <div style={{
-            position:"absolute", left:8, right:`calc(8px + ${(1-totalProgress)*100}%)`, top:"50%", height:4,
-            transform:"translateY(-50%)",
-            background:"linear-gradient(90deg, #60a5fa, #34d399)",
-            boxShadow:"0 0 14px rgba(56,189,248,0.35)", borderRadius:4, transition:"right 300ms ease"
+            position:"absolute", left:8, right:8, top:"50%", height:4, transform:"translateY(-50%)",
+            background:"rgba(255,255,255,0.08)", borderRadius:4
           }} />
+          {/* ✅ 채워지는 라인: 점 ‘중심’까지 정확히 */}
+          <div style={{
+            position:"absolute", left:8, top:"50%", height:4, transform:"translateY(-50%)",
+            width: `${Math.max(0, fillPx - 8)}px`,   // left 8px 보정
+            background:"linear-gradient(90deg, #60a5fa, #34d399)",
+            boxShadow:"0 0 14px rgba(56,189,248,0.35)",
+            borderRadius:4,
+            transition:"width 180ms ease"
+          }} />
+
+          {/* 노드 */}
           <div style={{ display:"grid", gridTemplateColumns:`repeat(${reachSteps.length}, 1fr)`, gap:0, position:"relative" }}>
             {reachSteps.map((s, idx) => {
               const active = idx <= currentIdx; const current = idx === currentIdx;
               return (
-                <div key={s.id} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+                <div
+                  key={s.id}
+                  ref={(el) => (stepRefs.current[idx] = el)}
+                  style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}
+                >
                   <div style={{
                     width: current ? 18 : 14, height: current ? 18 : 14, borderRadius:"50%",
                     background: active ? "linear-gradient(180deg, #60a5fa, #34d399)" : "rgba(255,255,255,0.15)",
@@ -167,7 +197,7 @@ function GuideCard({ onClose }) {
 
         <div style={gStyles.title}>
           <b style={{ color:"#7cc7ff" }}>전신이 화면에 모두</b> 나오게 배치해주세요.<br/>
-          <b style={{ color:"#7cc7ff" }}>최대치 1초 유지</b> 시 자동 기록됩니다.
+          <b style={{ color:"#7cc7ff" }}>1초 유지시</b>  자동 기록됩니다.
         </div>
 
         <div style={gStyles.imgWrap}>
@@ -179,10 +209,15 @@ function GuideCard({ onClose }) {
         <div style={gStyles.jointBox} aria-label="인식 필수 관절 안내">
           <div style={gStyles.jointTitle}>카메라에 꼭 보여야 하는 부위</div>
           <div style={gStyles.chipGrid}>
-            <span style={gStyles.chip}>어깨</span><span style={gStyles.chip}>팔꿈치</span><span style={gStyles.chip}>손목</span>
-            <span style={gStyles.chip}>엉덩이(골반)</span><span style={gStyles.chip}>무릎</span><span style={gStyles.chip}>발목</span>
+            <span style={gStyles.chip}>어깨</span>
+            <span style={gStyles.chip}>팔꿈치</span>
+            <span style={gStyles.chip}>손끝(검지)</span>
+            <span style={gStyles.chip}>엉덩이(골반)</span>
+            <span style={gStyles.chip}>무릎</span>
+            <span style={gStyles.chip}>발끝</span>
           </div>
-          <p style={gStyles.jointHint}>한쪽(왼/오) 6부위가 화면 안에 또렷하게 보여야 정확합니다. <b>Yaw 85~95°</b>를 맞춰주세요.</p>
+          <p style={gStyles.jointHint}>모든 부위가 화면안에 들어와야 측정을 시작합니다.</p>
+          <p style={gStyles.jointHint}><b>카메라 각도는 85~95°</b>를 맞춰주세요.</p>
         </div>
       </div>
     </aside>
@@ -213,7 +248,16 @@ export default function MeasureSitAndReach() {
   const [holdAtPeakSec, setHoldAtPeakSec] = useState("0.0");
   const [readyFrameOk, setReadyFrameOk] = useState(false);
   const [whichSide, setWhichSide] = useState("-");
+  const [anchoredHud, setAnchoredHud] = useState(false);          // ✅ 발끝 고정 HUD
   const [error, setError] = useState("");
+
+  // ✅ 가이드 표시 상태 + ESC로 닫기
+  const [showGuide, setShowGuide] = useState(true);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") setShowGuide(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const bestRef = useRef(0);
   useEffect(() => { bestRef.current = bestReachCm; }, [bestReachCm]);
@@ -246,12 +290,21 @@ export default function MeasureSitAndReach() {
     } catch {}
   }
 
-  // 관절 인덱스/가시성
-  const IDX = { L_SH:11, R_SH:12, L_EL:13, R_EL:14, L_WR:15, R_WR:16, L_HIP:23, R_HIP:24, L_KNEE:25, R_KNEE:26, L_ANK:27, R_ANK:28 };
+  // 관절 인덱스/가시성 (✅ 손끝·발끝 기준 6포인트로 교체)
+  const IDX = {
+    L_SH:11, R_SH:12,
+    L_EL:13, R_EL:14,
+    L_INDEX:19, R_INDEX:20, // ✅ 손끝(검지)
+    L_HIP:23, R_HIP:24,
+    L_KNEE:25, R_KNEE:26,
+    L_FOOT:31, R_FOOT:32,   // ✅ 발끝
+  };
   const VIS_TH = 0.45;
   function sideVisibilityCount(lms, side) {
-    const arr = side === "L" ? [IDX.L_SH, IDX.L_EL, IDX.L_WR, IDX.L_HIP, IDX.L_KNEE, IDX.L_ANK]
-                             : [IDX.R_SH, IDX.R_EL, IDX.R_WR, IDX.R_HIP, IDX.R_KNEE, IDX.R_ANK];
+    // ✅ 6포인트: 어깨, 팔꿈치, 손끝(검지), 엉덩이, 무릎, 발끝
+    const arr = side === "L"
+      ? [IDX.L_SH, IDX.L_EL, IDX.L_INDEX, IDX.L_HIP, IDX.L_KNEE, IDX.L_FOOT]
+      : [IDX.R_SH, IDX.R_EL, IDX.R_INDEX, IDX.R_HIP, IDX.R_KNEE, IDX.R_FOOT];
     return arr.reduce((c,i)=>{
       const p = lms?.[i]; if(!p) return c;
       const ok = (p.visibility ?? 0) >= VIS_TH && p.x>=0 && p.x<=1 && p.y>=0 && p.y<=1;
@@ -342,6 +395,7 @@ export default function MeasureSitAndReach() {
           setIfChanged(setCurrentReachCm, curRef, 0);
           setHoldAtPeakSec("0.0");
           setWhichSide("-");
+          setAnchoredHud(false); // 표시만 OFF (앵커 자체는 유지)
           setAutoStartArmed(true);
           readyHoldRef.current = 0;
 
@@ -356,8 +410,24 @@ export default function MeasureSitAndReach() {
         }
 
         // ① cm 계산/표시
-        const { cm, side, ok } = estimateForwardReachSignedCmX_oneSide(lms, userHeight);
-        if (ok && side) setWhichSide(side);
+        const { cm, side, ok, anchored } = estimateForwardReachSignedCmX_oneSide(lms, userHeight);
+        setAnchoredHud(!!anchored);
+
+        if (!ok) {
+          setWhichSide("-");
+          setIfChanged(setCurrentReachCm, curRef, 0);
+          setHoldAtPeakSec("0.0");
+
+          // 안정 윈도우 리셋
+          stableSumRef.current    = 0;
+          stableCountRef.current  = 0;
+          stableMinRef.current    = +Infinity;
+          stableMaxRef.current    = -Infinity;
+          stableFramesRef.current = 0;
+          return;
+        }
+
+        if (side) setWhichSide(side);
         const cmSan = Number.isFinite(cm) ? cm : 0;
         setIfChanged(setCurrentReachCm, curRef, cmSan);
 
@@ -428,27 +498,10 @@ export default function MeasureSitAndReach() {
       try { camera.stop(); } catch {}
       try { pose.close(); } catch {}
       peakHold.reset();
+      footAnchor.reset();      // ✅ 앵커도 정리
     };
   }, [userHeight]); // 의존성 최소화
 
-  /* 핸들러 */
-  function handleReset() {
-    peakHold.reset();
-    setPhase("ready");
-    setYawDeg(NaN);
-    setAngleOK(false);
-    setReadyFrameOk(false);
-    setIfChanged(setCurrentReachCm, curRef, 0);
-    setHoldAtPeakSec("0.0");
-    setWhichSide("-");
-    setAutoStartArmed(true);
-
-    stableSumRef.current    = 0;
-    stableCountRef.current  = 0;
-    stableMinRef.current    = +Infinity;
-    stableMaxRef.current    = -Infinity;
-    stableFramesRef.current = 0;
-  }
   function handleBackToSelectSaveOnly() {
     const best = Number.isFinite(bestRef.current) ? bestRef.current : 0;
     const bestAvg = Number.isFinite(bestAvgHoldCm) ? Number(bestAvgHoldCm.toFixed(1)) : 0;
@@ -464,7 +517,6 @@ export default function MeasureSitAndReach() {
     nav("/select");
   }
 
-  const pillStyle = { background:"#0b0b0bcc", color:"#fff", border:"1px solid #444", borderRadius:8, padding:"4px 8px", fontSize:12, lineHeight:1.3, backdropFilter:"blur(3px)" };
   const fmt = (v) => `${v >= 0 ? "+" : ""}${Number.isFinite(v) ? v.toFixed(1) : "—"} cm`;
   const bestAvgDisplay = Number.isFinite(bestAvgHoldCm) ? fmt(bestAvgHoldCm) : "—";
 
@@ -484,9 +536,11 @@ export default function MeasureSitAndReach() {
         <canvas ref={canvasRef} width={1280} height={720}
                 style={{ width:"100%", height:"auto", display:"block", zIndex:2, position:"relative" }} />
 
-        <div style={{ position:"absolute", right:12, top:140, zIndex:9 }}>
-          <GuideCard onClose={() => {}} />
-        </div>
+        {showGuide && (
+          <div style={{ position:"absolute", right:12, top:140, zIndex:9 }}>
+            <GuideCard onClose={() => setShowGuide(false)} />
+          </div>
+        )}
 
         {/* 좌측 HUD */}
         <div style={{
@@ -498,18 +552,10 @@ export default function MeasureSitAndReach() {
           <Metric label="카메라 각도" value={`${Number.isFinite(yawDeg) ? Math.round(yawDeg) : "—"}°`} dot={angleOK ? "#22c55e" : "#ef4444"} />
           <Metric label="관절 인식" value={`${sideCount}/6`} dot={sideCount >= 6 ? "#22c55e" : "#ef4444"} />
           <Metric label="현재" value={fmt(currentReachCm)} />
-          <Metric label="최대" value={fmt(bestReachCm)} />
-          <Metric label="평균(유지·최고)" value={bestAvgDisplay} />
+          {/* ❌ '최대' 제거 */}
+          <Metric label="측정값" value={bestAvgDisplay} />
           {phase === "running" && <Metric label="안정 유지" value={`${holdAtPeakSec}s / 1.0s`} />}
-          {phase === "ready" && (
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-              <span style={pillStyle}>세팅 {readyFrameOk ? "🟢OK" : "🔴조정필요"}</span>
-              <span style={pillStyle}>자동시작 {autoStartArmed ? "ON" : "OFF"}</span>
-            </div>
-          )}
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:4 }}>
-            <CtlButton onClick={handleReset}>초기화</CtlButton>
-          </div>
+          {/* ❌ 세팅/자동시작/초기화 블록 제거 */}
         </div>
       </div>
     </div>

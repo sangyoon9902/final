@@ -81,7 +81,7 @@ function IdModal({ open, id, onConfirm }) {
     <div className="modalBackdrop" role="dialog" aria-modal="true" aria-label="id 안내">
       <div className="modalCard">
         <h3 className="modalTitle">id가 발급되었습니다</h3>
-        <p className="modalDesc">아래 id는 결과 조회/리뷰 시 활용됩니다.</p>
+        <p className="modalDesc">아래 id는 결과 조회/리뷰 시 활용됩니다. 저장해주세요.</p>
         <div className="modalUidRow">
           <code className="modalUid">{id}</code>
           <button
@@ -325,7 +325,7 @@ export default function Start() {
       </form>
 
       <p style={{ marginTop: 18, color: "#666", fontSize: "0.9rem" }}>
-        AI 피트니스 코칭 기반 국민체력 100 간이 측정 서비스
+        AI 피트니스 코칭 기반 국민체력 100 온라인 운동 코칭 서비스
       </p>
 
       {/* ✅ 발급 직후에만 모달 표시 */}

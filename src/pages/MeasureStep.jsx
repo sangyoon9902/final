@@ -1,5 +1,5 @@
 // src/pages/MeasureStep.jsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../state/AppState";
 import {
@@ -311,7 +311,6 @@ export default function MeasureStep() {
         {phase === "done" && (
           <>
             <Pill>회복 기록 {recoveryAvg!=null?`${Math.round(recoveryAvg)} bpm`:"--"}</Pill>
-            {stepScore && <Pill>등급 {stepScore.grade} ({stepScore.desc})</Pill>}
             {Number.isFinite(stepScore?.vo2max) && <Pill>VO₂max {Number(stepScore.vo2max).toFixed(1)}</Pill>}
           </>
         )}
@@ -385,8 +384,7 @@ export default function MeasureStep() {
 
         {phase === "done" && (
           <>
-            <Button bg="#28a" onClick={()=>nav("/results")}>결과 보기 / 저장</Button>
-            <Button bg="#555" onClick={handleReset}>다시 측정</Button>
+
           </>
         )}
 
@@ -407,15 +405,14 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
     { id: "stepping", label: "3분 스텝검사" },
     { id: "rest",     label: "1분 휴식" },
   ];
-
-  // 모드별 말미 스텝 추가
+  // 모드별 말미 스텝
   const tailStep = mode === "manual"
     ? { id: "manual", label: "10초 심박수 측정" }
     : { id: "auto",   label: "심박수 자동 측정" };
 
   const steps = [...baseSteps, tailStep];
 
-  // 현재 단계 → 리본 id 매핑
+  // 현재 단계 id
   const currentId =
     phase === "idle"          ? "connect"  :
     phase === "prestep"       ? "guide"    :
@@ -429,24 +426,6 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
   const indexOf = (id) => steps.findIndex(s => s.id === id);
   const currentIdx = Math.max(0, indexOf(currentId));
 
-  // 단계 내 진행률(로컬)
-  let localProgress = 0;
-  if (phase === "prestep") {
-    // 안내 28초: 살짝 진행감만
-    localProgress = 0.2;
-  } else if (phase === "stepping") {
-    localProgress = 1 - (stepTimer / STEP_STEPPING_SEC);
-  } else if (phase === "recovery") {
-    localProgress = 1 - (recoveryTimer / STEP_RECOVERY_SEC);
-  } else if (phase === "count10") {
-    localProgress = 1 - (count10Timer / 10);
-  } else if (phase === "count10_done" || phase === "done") {
-    localProgress = 1;
-  }
-
-  const denom = Math.max(1, steps.length - 1);
-  const totalProgress = (currentIdx + localProgress) / denom;
-
   // 우측 상태 텍스트
   const rightText =
     phase === "idle"         ? "준비되면 ‘스텝검사 시작’을 눌러주세요" :
@@ -456,6 +435,27 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
     (mode === "manual" && phase === "count10")      ? `10초 카운트 남은 00:${String(count10Timer).padStart(2,"0")}` :
     (mode === "manual" && phase === "count10_done") ? "방금 센 박동 수를 입력해주세요" :
     phase === "done"         ? "측정 완료 ✅" : "";
+
+  // ✅ 트랙/점 DOM 측정: 점의 '중심'까지 채움
+  const trackRef = useRef(null);
+  const stepRefs = useRef([]);
+  const [fillPx, setFillPx] = useState(0);
+
+  useLayoutEffect(() => {
+    function measure() {
+      const track = trackRef.current?.getBoundingClientRect?.();
+      const dot   = stepRefs.current[currentIdx]?.getBoundingClientRect?.();
+      if (!track || !dot) return;
+      const dotCenter = dot.left + dot.width / 2;
+      const widthPx = Math.max(0, Math.min(track.width, dotCenter - track.left));
+      setFillPx(widthPx);
+    }
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (trackRef.current) ro.observe(trackRef.current);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [currentIdx, steps.length]);
 
   return (
     <div style={{ marginBottom: 12 }}>
@@ -482,18 +482,20 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
         </div>
 
         {/* 진행 바 */}
-        <div style={{ position:"relative", padding:"10px 0 4px" }}>
+        <div ref={trackRef} style={{ position:"relative", padding:"10px 0 4px" }}>
+          {/* 베이스 라인 */}
           <div style={{
             position:"absolute", left:8, right:8, top:"50%", height:4, transform:"translateY(-50%)",
             background:"rgba(255,255,255,0.08)", borderRadius:4
           }} />
+          {/* ✅ 채워지는 라인: 점 중심까지 정확히 */}
           <div style={{
-            position:"absolute", left:8, right:`calc(8px + ${(1-totalProgress)*100}%)`, top:"50%", height:4,
-            transform:"translateY(-50%)",
+            position:"absolute", left:8, top:"50%", height:4, transform:"translateY(-50%)",
+            width: `${Math.max(0, fillPx - 8)}px`,  // left:8px 보정
             background:"linear-gradient(90deg, #60a5fa, #34d399)",
             boxShadow:"0 0 14px rgba(56,189,248,0.35)",
             borderRadius:4,
-            transition:"right 300ms ease"
+            transition:"width 180ms ease"
           }} />
 
           {/* 노드 */}
@@ -502,7 +504,11 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
               const active = idx <= currentIdx;
               const current = idx === currentIdx;
               return (
-                <div key={s.id} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+                <div
+                  key={s.id}
+                  ref={(el) => (stepRefs.current[idx] = el)}
+                  style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}
+                >
                   <div style={{
                     width: current ? 18 : 14,
                     height: current ? 18 : 14,
@@ -529,6 +535,7 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
     </div>
   );
 }
+
 
 
 /* ───────────────────────── 기타 UI ───────────────────────── */
