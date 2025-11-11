@@ -19,8 +19,11 @@ ENV_PATH = SERVER_DIR / ".env"
 load_dotenv(ENV_PATH)
 
 # OPENAI_API_KEY 환경변수 보정(비어있으면 빈 문자열)
-_k = (os.getenv("OPENAI_API_KEY") or "").strip()
-os.environ["OPENAI_API_KEY"] = _k
+# OPENAI_API_KEY: 덮어쓰지 말고, 있으면 깔끔히 트림만
+_k = os.getenv("OPENAI_API_KEY")
+if _k:
+    os.environ["OPENAI_API_KEY"] = _k.strip()
+
 
 # ───────── OpenAI 클라이언트: 지연 초기화(lazy init) ─────────
 __openai_client: Optional[OpenAI] = None
