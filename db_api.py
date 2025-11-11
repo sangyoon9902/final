@@ -4,16 +4,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Any, Dict, Optional
 import sqlite3, os, json, logging
-
-DB_PATH = os.getenv("SERVER_DB_PATH") or "/Users/sangyuni/ai-fitness/data/server.db"
+from pathlib import Path
+PROJECT_DIR = Path(__file__).resolve().parent.parent  # <프로젝트 루트>
+DB_PATH = os.getenv("SERVER_DB_PATH") or str(PROJECT_DIR / "data" / "server.db")
 PAGE_SIZE_MAX = 200
 
 app = FastAPI(title="Results JSON API", docs_url=None, redoc_url=None)
 
 # ----- CORS: 프론트 오리진 명시 -----
 ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://final-theta-peach-92.vercel.app",
+  "https://final-git-main-sangyoon9902s-projects.vercel.app",
 ]
 app.add_middleware(
     CORSMiddleware,
@@ -61,12 +64,12 @@ def _row_to_summary(r: sqlite3.Row):
     }
 
 def _row_to_full(r: sqlite3.Row | Dict[str, Any]):
-    # Results.jsx / Review.jsx와 호환되는 구조
     user         = _loads(_get(r, "user_json")) or {}
     surveys      = _loads(_get(r, "surveys_json")) or {}
     measurements = _loads(_get(r, "measurements_json")) or {}
     evidence     = _loads(_get(r, "evidence_json")) or []
-    raw          = _loads(_get(r, "raw_json")) or {}
+    # 기존: raw_json -> 실제 스키마: payload_json
+    payload      = _loads(_get(r, "payload_json")) or {}
     plan_md      = _get(r, "plan_md", "") or ""
 
     return {
@@ -79,9 +82,8 @@ def _row_to_full(r: sqlite3.Row | Dict[str, Any]):
         "measurements": measurements,
         "planMd": plan_md,
         "evidence": evidence,
-        "raw": raw,
+        "raw": payload,        # 프론트 호환 위해 키 이름은 raw 유지
     }
-
 # ----- 기본/헬스 -----
 @app.get("/")
 def root():
