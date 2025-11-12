@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from uuid import uuid4
 from typing import Any, Dict
-import json, traceback, socket
+import json, traceback, socket, os    # ← os 추가
 from contextlib import closing
 from pathlib import Path
 
+import httpx                           # ← httpx 추가
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,7 +25,7 @@ from routers import users, review
 from rag.query_engine_kspo_only import generate_prescription_kspo_only, _get_openai_client
 
 # ───────────── FastAPI 초기화 ─────────────
-app = FastAPI(title="AI Fitness API", version="0.3.1")
+app = FastAPI(title="AI Fitness API", version="0.3.2")
 
 # ───────────── CORS 설정 ─────────────
 PROD = "https://final-theta-peach-92.vercel.app"
@@ -46,7 +47,6 @@ try:
         Base.metadata.create_all(bind=engine)
 except Exception:
     traceback.print_exc()
-
 
 # ───────────── 디버그 엔드포인트: DB 연결 상태 확인 ─────────────
 @app.get("/_debug/dbinfo")
@@ -88,7 +88,6 @@ def dbinfo():
                 info["tcp_error"] = str(exc)
     return info
 
-
 # ───────────── 이벤트 핸들러: OpenAI 초기화 ─────────────
 @app.on_event("startup")
 def _startup_rag():
@@ -97,7 +96,6 @@ def _startup_rag():
         print("✅ OpenAI 클라이언트 로드 완료 (KSPO 전용)")
     except Exception as e:
         print("⚠️ OpenAI 초기화 실패:", e)
-
 
 # ───────────── 기본/헬스 체크 ─────────────
 @app.get("/health")
@@ -112,6 +110,50 @@ def root():
         "post_endpoint": "/session_summary",
         "version": app.version,
     }
+
+# ─────────────────────────────────────────────────────────────
+# 👉 Pulsoid Proxy START
+# REST: https://dev.pulsoid.net/api/v1/data/heart_rate/latest  (Bearer 토큰 필요)
+PULSOID_LATEST_URL = "https://dev.pulsoid.net/api/v1/data/heart_rate/latest"
+
+@app.get("/api/heart-rate/health")
+def pulsoid_health():
+    has = bool((os.getenv("PULSOID_TOKEN") or "").strip())
+    return {"ok": has, "hasToken": has}
+
+@app.get("/api/heart-rate")
+async def proxy_heart_rate():
+    token = (os.getenv("PULSOID_TOKEN") or "").strip()
+    if not token:
+        raise HTTPException(status_code=500, detail="PULSOID_TOKEN is not set")
+
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(
+                PULSOID_LATEST_URL,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if r.status_code in (401, 403):
+            raise HTTPException(status_code=r.status_code, detail="Pulsoid auth error")
+        r.raise_for_status()
+        j = r.json() or {}
+
+        # 다양한 응답 포맷을 단일 키로 평탄화
+        bpm = (
+            (j.get("data") or {}).get("heart_rate")
+            or j.get("heart_rate")
+            or j.get("value")
+            or j.get("bpm")
+        )
+        measured_at = j.get("measured_at") or j.get("timestamp")
+
+        return {"bpm": bpm, "measured_at": measured_at, "_proxy": "fastapi"}
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Pulsoid upstream timeout")
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Pulsoid upstream error: {e}")
+# 👈 Pulsoid Proxy END
+# ─────────────────────────────────────────────────────────────
 
 # ───────────── GET 안내 ─────────────
 @app.get("/session_summary")
