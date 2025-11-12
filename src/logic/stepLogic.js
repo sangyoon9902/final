@@ -21,17 +21,43 @@ export function calcFitnessScore(recovery1minBPM) {
 
 // ─────────────────────────────────────────────
 // 심박 폴링 훅 (토큰 불필요, 프록시만 호출)
-// 사용법: const bpm = usePulsoidBpm(enabled, apiBase);
+// 사용법: const bpm = usePulsoidBpm(enabled, apiBaseOrList);
 // ─────────────────────────────────────────────
 import { useEffect, useRef, useState } from "react";
 
-export function usePulsoidBpm(enabled, apiBase = "http://localhost:3001") {
+function normaliseBases(apiBase) {
+  const arr = Array.isArray(apiBase) ? apiBase : [apiBase];
+  const seen = new Set();
+  const out = [];
+  for (const raw of arr) {
+    const norm = typeof raw === "string" ? raw.trim().replace(/\/+$/, "") : "";
+    const key = norm || "__relative__";
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(norm);
+  }
+  return out.length ? out : ["http://localhost:3001"];
+}
+
+function buildHrUrl(base) {
+  const norm = typeof base === "string" ? base : "";
+  return norm ? `${norm}/api/heart-rate` : "/api/heart-rate";
+}
+
+export function usePulsoidBpm(enabled, apiBase = ["http://localhost:3001"]) {
   const [bpm, setBpm] = useState(null);
   const timerRef = useRef(null);
   const aliveRef = useRef(true);
+  const basesRef = useRef(normaliseBases(apiBase));
+  const baseIndexRef = useRef(0);
 
   useEffect(() => {
     aliveRef.current = true;
+
+    basesRef.current = normaliseBases(apiBase);
+    if (baseIndexRef.current >= basesRef.current.length) {
+      baseIndexRef.current = 0;
+    }
 
     if (!enabled) {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -39,19 +65,34 @@ export function usePulsoidBpm(enabled, apiBase = "http://localhost:3001") {
       return () => { aliveRef.current = false; };
     }
 
-    async function tick() {
-      try {
-        const res = await fetch(`${apiBase}/api/heart-rate`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
+    if (timerRef.current) clearInterval(timerRef.current);
 
-        // 다양한 응답 키 방어적으로 처리
-        const vRaw = data?.heart_rate ?? data?.bpm ?? data?.value ?? data?.data?.heart_rate ?? null;
-        const v = Number(vRaw);
-        if (aliveRef.current && Number.isFinite(v) && v > 0) setBpm(v);
-      } catch {
-        // 네트워크 오류는 다음 주기에 재시도
-      }
+    async function tick() {
+      const bases = basesRef.current;
+      if (!bases.length) return;
+      const startIdx = baseIndexRef.current;
+
+      try {
+        for (let step = 0; step < bases.length; step += 1) {
+          const idx = (startIdx + step) % bases.length;
+          const base = bases[idx];
+          try {
+            const res = await fetch(buildHrUrl(base), { cache: "no-store" });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            const vRaw = data?.heart_rate ?? data?.bpm ?? data?.value ?? data?.data?.heart_rate ?? null;
+            const v = Number(vRaw);
+            baseIndexRef.current = idx;
+            if (aliveRef.current && Number.isFinite(v) && v > 0) {
+              setBpm(v);
+            }
+            break;
+          } catch (innerError) {
+            baseIndexRef.current = (idx + 1) % bases.length;
+          }
+        }
+      } catch {}
     }
 
     // 즉시 1회, 이후 1초 폴링

@@ -1,5 +1,5 @@
 // src/pages/MeasureStep.jsx
-import { useEffect, useRef, useState, useLayoutEffect } from "react";
+import { useEffect, useRef, useState, useLayoutEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../state/AppState";
 import {
@@ -10,29 +10,94 @@ import {
 } from "../logic/stepLogic";
 import { formatMMSS } from "../utils/format";
 
-// ✅ ecgShape 함수를 컴포넌트 밖, 파일 상단으로 이동
+/* ───────── ECG 파형 함수(컴포넌트 밖) ───────── */
 function ecgShape(p) {
   let y = 0;
-  if (p > 0.03 && p <= 0.08) y += Math.sin(((p - 0.03) / 0.05) * Math.PI) * 0.25; // P
-  if (p > 0.10 && p <= 0.115) y -= Math.sin(((p - 0.10) / 0.015) * Math.PI) * 1.2; // Q
+  if (p > 0.03 && p <= 0.08)  y += Math.sin(((p - 0.03) / 0.05) * Math.PI) * 0.25; // P
+  if (p > 0.10 && p <= 0.115) y -= Math.sin(((p - 0.10) / 0.015) * Math.PI) * 1.2;  // Q
   if (p > 0.115 && p <= 0.135) y += Math.sin(((p - 0.115) / 0.02) * Math.PI) * 2.6; // R
   if (p > 0.135 && p <= 0.155) y -= Math.sin(((p - 0.135) / 0.02) * Math.PI) * 1.4; // S
-  if (p > 0.22 && p <= 0.36) y += Math.sin(((p - 0.22) / 0.14) * Math.PI) * 0.6; // T
+  if (p > 0.22 && p <= 0.36)  y += Math.sin(((p - 0.22) / 0.14) * Math.PI) * 0.6;  // T
   y += (Math.random() - 0.5) * 0.02; // 미세 노이즈
   return y;
 }
 
+/* ───────── Pulsoid 프록시 베이스 탐색 유틸 ───────── */
+const PULSOID_RELATIVE_KEY = "__relative__";
+function normalizeProxyBase(raw) {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  return trimmed.replace(/\/+$/, "");
+}
+function buildPulsoidProxyBases() {
+  const out = [];
+  const seen = new Set();
+  const push = (value) => {
+    const normalized = value === PULSOID_RELATIVE_KEY ? "" : normalizeProxyBase(value);
+    const key = normalized || PULSOID_RELATIVE_KEY;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(normalized);
+  };
+
+  const envBase = normalizeProxyBase(import.meta?.env?.VITE_PULSOID_PROXY ?? "");
+  if (envBase) push(envBase);
+
+  if (typeof window !== "undefined") {
+    push(PULSOID_RELATIVE_KEY); // 현재 도메인(/api/heart-rate)
+    const origin = normalizeProxyBase(window.location?.origin ?? "");
+    if (origin) push(origin);
+  }
+
+  push("http://localhost:3001"); // 로컬 프록시 후보
+  return out.length ? out : ["http://localhost:3001"];
+}
+function promoteProxyBase(list, base) {
+  const normalized = normalizeProxyBase(base ?? "");
+  const target = normalized || "";
+  const seen = new Set();
+  const result = [];
+  const add = (value) => {
+    const norm = normalizeProxyBase(value ?? "");
+    const key = norm || PULSOID_RELATIVE_KEY;
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(norm);
+  };
+  add(target);
+  list.forEach(add);
+  return result;
+}
+function buildHeartRateUrl(base) {
+  const normalized = normalizeProxyBase(base ?? "");
+  return normalized ? `${normalized}/api/heart-rate` : "/api/heart-rate";
+}
+function describeProxyBase(base) {
+  const normalized = normalizeProxyBase(base ?? "");
+  if (!normalized) return "현재 도메인(/api/heart-rate)";
+  return `${normalized}/api/heart-rate`;
+}
+
+/* ───────── 상수 ───────── */
 const STEP_AUDIO_SRC = "/audio/step-beat.mp3";
-const PULSOID_API_BASE = import.meta?.env?.VITE_PULSOID_PROXY || "http://localhost:3001";
 const USE_GUIDED_FLOW = true;
 const GUIDE_SEC = 28;
 
+/* ───────── 페이지 컴포넌트 ───────── */
 export default function MeasureStep() {
   const nav = useNavigate();
   const { setSession } = useApp();
 
-  const [mode, setMode] = useState("auto"); // 'auto' | 'manual'
-  const [phase, setPhase] = useState("idle"); // idle | prestep | stepping | recovery | count10 | count10_done | done
+  // Pulsoid 프록시 후보 리스트 (env → 현재도메인 → origin → localhost)
+  const [pulsoidBases, setPulsoidBases] = useState(() => buildPulsoidProxyBases());
+  const pulsoidBaseSummary = useMemo(
+    () => pulsoidBases.map(describeProxyBase).join(" · "),
+    [pulsoidBases]
+  );
+
+  const [mode, setMode] = useState("auto");              // 'auto' | 'manual'
+  const [phase, setPhase] = useState("idle");            // idle | prestep | stepping | recovery | count10 | count10_done | done
   const phaseRef = useRef(phase);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -41,8 +106,8 @@ export default function MeasureStep() {
   const [connectStatus, setConnectStatus] = useState("idle"); // idle | connecting | connected | error
   const [connectError, setConnectError] = useState("");
 
-  // HR 폴링
-  const hrBpm = usePulsoidBpm(pulsoidConnected && mode === "auto", PULSOID_API_BASE);
+  // HR 폴링 (배열 후보를 전달하면 hook 내부에서 순환/폴백)
+  const hrBpm = usePulsoidBpm(pulsoidConnected && mode === "auto", pulsoidBases);
   const lastValidHrRef = useRef(null);
   useEffect(() => { if (Number.isFinite(hrBpm) && hrBpm > 0) lastValidHrRef.current = hrBpm; }, [hrBpm]);
 
@@ -156,24 +221,36 @@ export default function MeasureStep() {
     setPhase("done");
   }
 
-  // 연결
+  // 연결(여러 프록시 후보 순차 시도)
   async function handleConnectPulsoid() {
     setConnectStatus("connecting"); setConnectError(""); setPulsoidConnected(false);
-    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 3000);
-    try {
-      const res = await fetch(`${PULSOID_API_BASE}/api/heart-rate`, { signal: ctrl.signal });
-      clearTimeout(t);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json().catch(() => ({}));
-      const bpm = Number(data?.bpm ?? data?.heart_rate ?? data?.value);
-      if (Number.isFinite(bpm) && bpm > 0) { setPulsoidConnected(true); setConnectStatus("connected"); }
-      else { setPulsoidConnected(false); setConnectStatus("error"); setConnectError("기기 심박 데이터가 유효하지 않습니다."); }
-    } catch (e) {
-      clearTimeout(t);
-      setPulsoidConnected(false); setConnectStatus("error");
-      setConnectError(`연결 실패: Pulsoid 프록시 확인 (${PULSOID_API_BASE})`);
-      console.warn(e);
+    const errorDetails = [];
+    for (const base of pulsoidBases) {
+      const url = buildHeartRateUrl(base);
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 3000);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+        clearTimeout(t);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json().catch(() => ({}));
+        const bpm = Number(data?.bpm ?? data?.heart_rate ?? data?.value);
+        setPulsoidConnected(true);
+        setConnectStatus("connected");
+        setConnectError("");
+        setPulsoidBases(prev => promoteProxyBase(prev, base)); // 성공한 베이스를 맨 앞으로
+        if (Number.isFinite(bpm) && bpm > 0) lastValidHrRef.current = bpm;
+        return;
+      } catch (e) {
+        clearTimeout(t);
+        const reason = e?.name === "AbortError" ? "시간 초과" : (e?.message || "네트워크 오류");
+        errorDetails.push(`${describeProxyBase(base)} → ${reason}`);
+      }
     }
+    setPulsoidConnected(false);
+    setConnectStatus("error");
+    setConnectError(`연결 실패: Pulsoid 프록시 확인 (${errorDetails.join(" | ") || pulsoidBaseSummary})`);
+    console.warn("Pulsoid connect failed", errorDetails);
   }
 
   function handleStartStep() {
@@ -333,7 +410,7 @@ function Heartline({ bpm, connected }) {
       if (!cvs || !box) return;
 
       const wCss = Math.max(320, Math.round(box.width));
-      const hCss = 160; // 살짝 키워서 보기 좋게
+      const hCss = 160;
 
       const curW = parseInt(cvs.style.width || "0", 10);
       const curH = parseInt(cvs.style.height || "0", 10);
@@ -365,13 +442,11 @@ function Heartline({ bpm, connected }) {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(raf);
     };
-    }, [dpr]);
+  }, [dpr]);
 
   useEffect(() => {
     const cvs = canvasRef.current; if (!cvs) return;
     const ctx = cvs.getContext("2d"); ctx.lineJoin = "round"; ctx.lineCap = "round";
-
-    // ❌ useEffect 내부에 있던 ecgShape 정의 제거
 
     function loop(ts) {
       const now = ts || performance.now();
@@ -388,14 +463,11 @@ function Heartline({ bpm, connected }) {
       const arr = samplesRef.current;
 
       if (connected && Number.isFinite(targetBpm)) {
-        // 실제 ECG 형태
         phaseRef.current += speed; if (phaseRef.current >= 1) phaseRef.current -= 1;
         const amp = (H / dpr) * 0.28;
-        // ✅ 파일 상단에 정의된 ecgShape 함수 사용
         const y = baseline - ecgShape(phaseRef.current) * amp;
         if (arr.length >= capacityRef.current && arr.length > 0) { arr.shift(); arr.push(y); }
       } else {
-        // ✅ 연결 X: 기준선으로 “쭉 가는” 파형 (아주 미세한 흔들림만)
         const tiny = (Math.random() - 0.5) * (H / dpr) * 0.008; // 거의 직선
         const y = baseline + tiny;
         if (arr.length >= capacityRef.current && arr.length > 0) { arr.shift(); arr.push(y); }
@@ -432,13 +504,13 @@ function Heartline({ bpm, connected }) {
         ctx.beginPath(); ctx.arc(W - 8 * dpr, yy, 3.2 * dpr, 0, Math.PI * 2); ctx.fill();
       }
 
-      // 연결 안됨 오버레이(아주 옅게)
+      // 연결 안됨 오버레이
       if (!connected) {
         ctx.fillStyle = "rgba(0,0,0,0.25)";
         ctx.fillRect(0, 0, W, H);
       }
 
-      // 라벨/수치 (맨 위에)
+      // 라벨/수치
       ctx.fillStyle = "rgba(255,255,255,0.9)";
       ctx.font = `${12 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
       ctx.fillText("실시간 심박", 12 * dpr, 20 * dpr);
@@ -473,8 +545,7 @@ function Heartline({ bpm, connected }) {
         width: "100%",
         maxWidth: "100%",
         overflow: "hidden",
-        minHeight: 180, // 보기 좋은 기본 높이
-        // ✅ 레이아웃 격리
+        minHeight: 180,
         boxSizing: "border-box",
         contain: "layout size style paint",
         isolation: "isolate",
@@ -486,7 +557,7 @@ function Heartline({ bpm, connected }) {
   );
 }
 
-/* ───────── 리본: scaleX 기반 + 좌우 여백 지정 ───────── */
+/* ───────── 리본 UI ───────── */
 function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
   const base = [
     { id: "connect", label: "연결/입력" },
@@ -596,7 +667,7 @@ function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
   );
 }
 
-/* ───────── UI ───────── */
+/* ───────── 간단 UI ───────── */
 function Pill({children}) {
   return (
     <span style={{ background:"#1a1a2a", border:"1px solid #444", borderRadius:"999px", padding:"6px 10px", fontSize:12 }}>
