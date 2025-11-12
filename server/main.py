@@ -2,34 +2,34 @@
 from __future__ import annotations
 
 from uuid import uuid4
-from typing import Any, Dict, Optional
-import json, traceback
+from typing import Any, Dict
+import json, traceback, socket
+from contextlib import closing
+from pathlib import Path
 
-from fastapi import FastAPI, Request, HTTPException, Depends, Body
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from dotenv import load_dotenv
 
-# 내부 모듈
+# ───────────── 환경변수(.env) 로드: 반드시 db import보다 먼저 ─────────────
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+# ───────────── 내부 모듈 ─────────────
 from db import Base, engine, get_db
 from models import DBUser, DBResult
-from routers import users, review  # 기존 review 라우터 사용
+from routers import users, review
 from rag.query_engine_kspo_only import generate_prescription_kspo_only, _get_openai_client
 
-
-
-
-
+# ───────────── FastAPI 초기화 ─────────────
 app = FastAPI(title="AI Fitness API", version="0.3.1")
 
-# server/main.py (맨 위 import들 아래 어딘가)
-from urllib.parse import urlparse
-from db import DATABASE_URL
-
-# CORS
+# ───────────── CORS 설정 ─────────────
 PROD = "https://final-theta-peach-92.vercel.app"
 MAIN_PREVIEW = "https://final-git-main-sangyoon9902s-projects.vercel.app"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[PROD, MAIN_PREVIEW, "http://localhost:5173", "http://localhost:3000"],
@@ -39,35 +39,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# DB 테이블 자동 생성 (초기 단계)
-Base.metadata.create_all(bind=engine)
+# ───────────── DB 테이블 생성 (SQLite일 때만 자동) ─────────────
+try:
+    dialect = engine.url.get_backend_name()
+    if dialect == "sqlite":
+        Base.metadata.create_all(bind=engine)
+except Exception:
+    traceback.print_exc()
 
 
-
-
-
-
-# ---- 공통 디버그: RDB 버전/URL 확인 ----
+# ───────────── 디버그 엔드포인트: DB 연결 상태 확인 ─────────────
 @app.get("/_debug/dbinfo")
 def dbinfo():
     info = {"url": str(engine.url)}
     try:
-        dialect = engine.url.get_backend_name()  # 'sqlite' | 'postgresql' ...
+        dialect = engine.url.get_backend_name()
         with engine.connect() as conn:
             if dialect == "sqlite":
                 info["version"] = conn.execute(text("select sqlite_version()")).scalar()
             else:
                 info["version"] = conn.execute(text("select version()")).scalar()
-            # results 테이블 카운트 (없으면 None)
+
             try:
                 info["results_count"] = conn.execute(text("select count(*) from results")).scalar()
             except Exception:
                 info["results_count"] = None
     except Exception as e:
         info["error"] = repr(e)
+
+    host = engine.url.host
+    port = engine.url.port
+    if host:
+        info["host"] = host
+        if port:
+            info["port"] = port
+        try:
+            infos = socket.getaddrinfo(host, None)
+            resolved = sorted({addr[4][0] for addr in infos if addr and addr[4] and addr[4][0]})
+            if resolved:
+                info["resolved_ips"] = resolved
+        except socket.gaierror as exc:
+            info["dns_error"] = str(exc)
+        if port:
+            try:
+                with closing(socket.create_connection((host, port), timeout=2)):
+                    info["tcp_connectivity"] = "ok"
+            except OSError as exc:
+                info["tcp_error"] = str(exc)
     return info
 
-# 이벤트 핸들러
+
+# ───────────── 이벤트 핸들러: OpenAI 초기화 ─────────────
 @app.on_event("startup")
 def _startup_rag():
     try:
@@ -76,7 +98,8 @@ def _startup_rag():
     except Exception as e:
         print("⚠️ OpenAI 초기화 실패:", e)
 
-# Health / Root
+
+# ───────────── 기본/헬스 체크 ─────────────
 @app.get("/health")
 def health():
     return {"ok": True, "service": "ai-fitness", "version": app.version}
@@ -90,7 +113,7 @@ def root():
         "version": app.version,
     }
 
-# GET 안내
+# ───────────── GET 안내 ─────────────
 @app.get("/session_summary")
 def session_summary_get():
     return {
@@ -102,7 +125,7 @@ def session_summary_get():
         },
     }
 
-# POST 본체
+# ───────────── POST 본체 ─────────────
 @app.post("/session_summary")
 async def session_summary(req: Request, db: Session = Depends(get_db)):
     trace_id = str(uuid4())
@@ -138,7 +161,7 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
     evidence = plan.get("evidence") or []
     received = body or {}
 
-    # 4) DB 저장 (ORM, RDB 공통)
+    # 4) DB 저장
     try:
         user_obj = received.get("user", {})
         user_id = user_obj.get("userId")
@@ -154,9 +177,9 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
             id=str(uuid4()),
             user_id=user_id,
             trace_id=trace_id,
-            status=( (received.get("status") or "").strip().lower()
-                     if (received.get("status") or "").strip().lower() in {"ready","review","final"}
-                     else "ready"),
+            status=((received.get("status") or "").strip().lower()
+                    if (received.get("status") or "").strip().lower() in {"ready", "review", "final"}
+                    else "ready"),
             user_json=received.get("user"),
             surveys_json=received.get("surveys"),
             measurements_json=received.get("measurements"),
@@ -172,8 +195,13 @@ async def session_summary(req: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
 
     # 5) 응답
-    return {"trace_id": trace_id, "planText": {"planText": plan_md}, "evidence": evidence, "received": received}
+    return {
+        "trace_id": trace_id,
+        "planText": {"planText": plan_md},
+        "evidence": evidence,
+        "received": received,
+    }
 
-# 라우터 등록 (JSON API는 routers/review 로 몰아넣기 권장)
+# ───────────── 라우터 등록 ─────────────
 app.include_router(users.router)
 app.include_router(review.router)
