@@ -6,8 +6,7 @@ import cors from "cors";
 const app = express();
 app.use(cors());
 
-const PULSOID_TOKEN = "23f9c9d7-66f3-4f58-a68f-505500ef6b15";
-
+const PULSOID_TOKEN = (process.env.PULSOID_TOKEN || "").trim();
 // 간단 요청 로그 (디버깅용)
 app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
