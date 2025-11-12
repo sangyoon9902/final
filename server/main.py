@@ -114,7 +114,7 @@ def root():
 # ─────────────────────────────────────────────────────────────
 # 👉 Pulsoid Proxy START
 # REST: https://dev.pulsoid.net/api/v1/data/heart_rate/latest  (Bearer 토큰 필요)
-PULSOID_LATEST_URL = "https://dev.pulsoid.net/api/v1/data/heart_rate/latest"
+PULSOID_LATEST_URL = "https://pulsoid.net/api/v1/data/heart_rate/latest"
 
 @app.get("/api/heart-rate/health")
 def pulsoid_health():
