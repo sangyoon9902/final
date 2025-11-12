@@ -7,6 +7,9 @@ const app = express();
 app.use(cors());
 
 const PULSOID_TOKEN = (process.env.PULSOID_TOKEN || "").trim();
+const PULSOID_API_URL =
+  (process.env.PULSOID_API_URL || "https://dev.pulsoid.net/api/v1/data/heart_rate/latest").trim() ||
+  "https://dev.pulsoid.net/api/v1/data/heart_rate/latest";
 // 간단 요청 로그 (디버깅용)
 app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -15,7 +18,7 @@ app.use((req, _res, next) => {
 
 app.get("/api/heart-rate", async (_req, res) => {
   try {
-    const r = await fetch("https://dev.pulsoid.net/api/v1/data/heart_rate/latest", {
+    const r = await fetch(PULSOID_API_URL, {
       headers: { Authorization: `Bearer ${PULSOID_TOKEN}` },
     });
 
