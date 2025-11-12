@@ -10,18 +10,6 @@ import {
 } from "../logic/stepLogic";
 import { formatMMSS } from "../utils/format";
 
-// ✅ ecgShape 함수를 컴포넌트 밖, 파일 상단으로 이동
-function ecgShape(p) {
-  let y = 0;
-  if (p > 0.03 && p <= 0.08) y += Math.sin(((p - 0.03) / 0.05) * Math.PI) * 0.25; // P
-  if (p > 0.10 && p <= 0.115) y -= Math.sin(((p - 0.10) / 0.015) * Math.PI) * 1.2; // Q
-  if (p > 0.115 && p <= 0.135) y += Math.sin(((p - 0.115) / 0.02) * Math.PI) * 2.6; // R
-  if (p > 0.135 && p <= 0.155) y -= Math.sin(((p - 0.135) / 0.02) * Math.PI) * 1.4; // S
-  if (p > 0.22 && p <= 0.36) y += Math.sin(((p - 0.22) / 0.14) * Math.PI) * 0.6; // T
-  y += (Math.random() - 0.5) * 0.02; // 미세 노이즈
-  return y;
-}
-
 const STEP_AUDIO_SRC = "/audio/step-beat.mp3";
 const PULSOID_API_BASE = import.meta?.env?.VITE_PULSOID_PROXY || "http://localhost:3001";
 const USE_GUIDED_FLOW = true;
@@ -229,9 +217,8 @@ export default function MeasureStep() {
         count10Timer={count10Timer}
       />
 
+      {/* ⛳️ 상단 Pill에서 '모드', '현재 HR'은 제거 */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:12, marginBottom:12, fontSize:12 }}>
-        <Pill>모드 {mode==="auto"?"자동":"수동"}</Pill>
-        <Pill>현재 HR {Number.isFinite(hrBpm)?`${hrBpm} bpm`:"--"}</Pill>
         {Number.isFinite(restingBpm) && <Pill>안정심박 {restingBpm} bpm</Pill>}
         {phase === "done" && (
           <>
@@ -256,17 +243,19 @@ export default function MeasureStep() {
               </select>
             </Pill>
 
-            <Button
-              bg={mode!=="auto" ? "#333" : connectStatus==="connected" ? "#2d6" : connectStatus==="connecting" ? "#777" : "#555"}
-              onClick={mode==="auto" ? handleConnectPulsoid : undefined}
-              disabled={mode!=="auto" || connectStatus==="connecting"}
-            >
-              {mode!=="auto" && "수동 모드"}
-              {mode==="auto" && connectStatus==="idle" && "워치 연결"}
-              {mode==="auto" && connectStatus==="connecting" && "연결 중..."}
-              {mode==="auto" && connectStatus==="connected" && "워치 연결됨 ✅"}
-              {mode==="auto" && connectStatus==="error" && "연결 실패(다시 시도)"}
-            </Button>
+        {mode === "auto" && (
+  <Button
+    bg={connectStatus==="connected" ? "#2d6" : connectStatus==="connecting" ? "#777" : "#555"}
+    onClick={handleConnectPulsoid}
+    disabled={connectStatus==="connecting"}
+  >
+    {connectStatus==="idle" && "워치 연결"}
+    {connectStatus==="connecting" && "연결 중..."}
+    {connectStatus==="connected" && "워치 연결됨 ✅"}
+    {connectStatus==="error" && "연결 실패(다시 시도)"}
+  </Button>
+)}
+
 
             {mode==="manual" && (
               <input
@@ -313,56 +302,39 @@ export default function MeasureStep() {
   );
 }
 
-/* ───────── Heartline: 캔버스 ECG 스타일 (가시성 강화 버전) ───────── */
+/* ───────── Heartline: 라인 플롯(심박수 vs. 시간) ───────── */
 function Heartline({ bpm, connected }) {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
   const rafRef = useRef(0);
   const dpr = Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
 
-  const samplesRef = useRef([]);
-  const capacityRef = useRef(0);
-  const phaseRef = useRef(0);
+  // 설정: y축 스케일 (bpm)
+  const Y_MIN = 40;
+  const Y_MAX = 180;
+
+  // 데이터 버퍼
+  const samplesRef = useRef([]);     // y값(pixel) 배열
+  const capacityRef = useRef(0);     // 화면에 들어가는 샘플 수
   const lastTsRef = useRef(0);
 
-  // ✅ 실시간 bpm은 그대로 유지하되, 시각화용으로는 EMA로 살짝 스무딩
-  const bpmEmaRef = useRef(Number.isFinite(bpm) ? bpm : 60);
-  const bpmRef = useRef(Number.isFinite(bpm) ? bpm : 60);
+  // BPM 스무딩
+  const emaRef = useRef(Number.isFinite(bpm) ? bpm : 60);
   useEffect(() => {
     if (Number.isFinite(bpm) && bpm > 0) {
-      bpmRef.current = bpm;
-      const alpha = 0.15; // 반응성 ↑ (0.1~0.2 권장)
-      bpmEmaRef.current = bpmEmaRef.current * (1 - alpha) + bpm * alpha;
+      const alpha = 0.18; // 반응성 (0.1~0.3)
+      emaRef.current = emaRef.current * (1 - alpha) + bpm * alpha;
     }
   }, [bpm]);
 
-  // ✅ R-피크 순간 플래시 효과
-  const rFlashRef = useRef(0); // 0~1
-  const wasInRRef = useRef(false);
-
-  // 작은 도우미
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const lerp = (a, b, t) => a + (b - a) * t;
-
-  // ✅ BPM에 따른 색상(살짝만 변화: 차분한 청록→연녹→황록)
-  function strokeColorForBpm(b) {
-    const t = clamp((b - 50) / (160 - 50), 0, 1); // 50→160 범위 맵핑
-    const hue = lerp(170, 80, t);                 // 170(청록) → 80(연녹)
-    return `hsl(${hue} 80% 70%)`;
-  }
-  function pointColorForBpm(b) {
-    const t = clamp((b - 50) / (160 - 50), 0, 1);
-    const hue = lerp(170, 90, t);
-    return `hsl(${hue} 90% 78%)`;
-  }
-
+  // 크기 반응형 (높이 키움: hCss 220, minHeight도 아래에서 260)
   useLayoutEffect(() => {
     function resize() {
       const cvs = canvasRef.current; const box = wrapRef.current?.getBoundingClientRect?.();
       if (!cvs || !box) return;
 
       const wCss = Math.max(320, Math.round(box.width));
-      const hCss = 170; // 살짝 키움
+      const hCss = 220;
 
       const curW = parseInt(cvs.style.width || "0", 10);
       const curH = parseInt(cvs.style.height || "0", 10);
@@ -372,7 +344,7 @@ function Heartline({ bpm, connected }) {
       cvs.width = w; cvs.height = h;
       cvs.style.width = `${wCss}px`; cvs.style.height = `${hCss}px`;
 
-      const nextCap = Math.floor(w);
+      const nextCap = Math.floor(w); // 1px = 1 sample (좌->우 스크롤)
       if (capacityRef.current !== nextCap) {
         capacityRef.current = nextCap;
         samplesRef.current = new Array(nextCap).fill(h / 2);
@@ -381,16 +353,13 @@ function Heartline({ bpm, connected }) {
     resize();
     let raf;
     let ro;
-
-    const hasResizeObserver = typeof ResizeObserver !== "undefined";
-    if (hasResizeObserver) {
+    if (typeof ResizeObserver !== "undefined") {
       ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(resize); });
       if (wrapRef.current) ro.observe(wrapRef.current);
     }
     window.addEventListener("resize", resize);
-
     return () => {
-      if (hasResizeObserver) ro?.disconnect();
+      ro?.disconnect?.();
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(raf);
     };
@@ -400,53 +369,51 @@ function Heartline({ bpm, connected }) {
     const cvs = canvasRef.current; if (!cvs) return;
     const ctx = cvs.getContext("2d"); ctx.lineJoin = "round"; ctx.lineCap = "round";
 
+    const hToPix = (val) => {
+      const H = cvs.height, pad = 8 * dpr;
+      const y = (1 - (val - Y_MIN) / (Y_MAX - Y_MIN)); // 0(top)~1(bottom)
+      return Math.round(pad + y * (H - pad * 2));
+    };
+
     function loop(ts) {
       const now = ts || performance.now();
       const last = lastTsRef.current || now;
-      const dt = Math.min(0.060, (now - last) / 1000);
+      const dt = Math.min(0.050, (now - last) / 1000); // 최대 20fps 갱신
       lastTsRef.current = now;
 
-      // ✅ 시각화는 EMA BPM을 기준으로 (작은 변화도 눈에 띄게)
-      const emaBpm = clamp(bpmEmaRef.current || 60, 30, 220);
-
-      // ✅ 속도와 진폭 모두 BPM에 의존시켜 변화가 확실히 보이게
-      const beatInterval = 60 / emaBpm;
-      const speed = dt / beatInterval;                      // 기본 속도
-      const speedBoost = 1 + (emaBpm - 60) / 220 * 0.35;    // 고BPM일수록 약간 더 빠르게
-      const visualSpeed = speed * speedBoost;
-
-      const W = cvs.width, H = cvs.height;
-      const baseline = (H / dpr) * 0.5;
-      const arr = samplesRef.current;
-
-      // ✅ 진폭: BPM에 따라 0.85~1.35배 (작은 변화도 시각적 차이)
-      const ampBase = (H / dpr) * 0.26;
-      const ampScale = clamp(0.85 + (emaBpm - 60) / 220 * 0.5, 0.85, 1.35);
-      const amp = ampBase * ampScale;
-
-      if (connected && Number.isFinite(emaBpm)) {
-        phaseRef.current += visualSpeed;
-        if (phaseRef.current >= 1) phaseRef.current -= 1;
-
-        // ✅ R-피크(0.115~0.135)에서 플래시 트리거
-        const inR = phaseRef.current > 0.115 && phaseRef.current <= 0.135;
-        if (inR && !wasInRRef.current) {
-          rFlashRef.current = 1; // 점등
-        }
-        wasInRRef.current = inR;
-
-        const y = baseline - ecgShape(phaseRef.current) * amp;
-        if (arr.length >= capacityRef.current && arr.length > 0) { arr.shift(); arr.push(y); }
+      // 새로운 표본 추가 (연결 X면 마지막 값에 작은 노이즈)
+      let showBpm;
+      if (connected && Number.isFinite(emaRef.current)) {
+        showBpm = Math.max(Y_MIN, Math.min(Y_MAX, emaRef.current));
       } else {
-        const tiny = (Math.random() - 0.5) * (H / dpr) * 0.008;
-        const y = baseline + tiny;
-        if (arr.length >= capacityRef.current && arr.length > 0) { arr.shift(); arr.push(y); }
+        const prevPix = samplesRef.current.at(-1);
+        const prevVal = prevPix != null ? prevPix : hToPix(60);
+        const tiny = ((Math.random() - 0.5) * 0.6) * dpr;
+        samplesRef.current.push((prevVal + tiny));
+        if (samplesRef.current.length > capacityRef.current) samplesRef.current.shift();
+        draw(ctx, cvs, hToPix, connected, bpm);
+        rafRef.current = requestAnimationFrame(loop);
+        return;
       }
 
-      // 배경/그리드
+      const steps = Math.max(1, Math.min(3, Math.round(dt * 60)));
+      for (let i = 0; i < steps; i++) {
+        samplesRef.current.push(hToPix(showBpm));
+        if (samplesRef.current.length > capacityRef.current) samplesRef.current.shift();
+      }
+
+      draw(ctx, cvs, hToPix, connected, bpm);
+      rafRef.current = requestAnimationFrame(loop);
+    }
+
+    function draw(ctx, cvs, hToPix, connected, rawBpm) {
+      const W = cvs.width, H = cvs.height;
+
+      // 배경
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = "#0b0f1d"; ctx.fillRect(0, 0, W, H);
 
+      // 그리드
       ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
       ctx.beginPath();
       const gridStep = 16 * dpr;
@@ -454,72 +421,74 @@ function Heartline({ bpm, connected }) {
       for (let y = 0; y < H; y += gridStep) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
       ctx.stroke();
 
-      // 중앙선
-      ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 1.2 * dpr;
-      ctx.beginPath(); const mid = Math.floor(H / 2) + 0.5; ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
+      // 기준선
+      const marks = [60, 100, 140].filter(v => v >= 40 && v <= 180);
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.setLineDash([4 * dpr, 6 * dpr]);
+      marks.forEach(v => {
+        const y = hToPix(v);
+        ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); ctx.stroke();
+      });
+      ctx.setLineDash([]);
 
-      // 파형
+      // 라인
+      const arr = samplesRef.current;
       if (arr.length > 1) {
-        const stroke = connected ? strokeColorForBpm(emaBpm) : "rgba(112,225,200,0.75)";
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = 2 * dpr;
-        ctx.beginPath(); const leftPad = 6 * dpr;
+        ctx.strokeStyle = connected ? "#ff8c3a" : "rgba(255,165,120,0.75)";
+        ctx.lineWidth = 2.2 * dpr;
+        ctx.beginPath();
+        const leftPad = 6 * dpr;
         for (let i = 0; i < arr.length; i++) {
           const x = leftPad + i;
-          const y = Math.max(0, Math.min(H - 1, Math.round(arr[i] * dpr)));
+          const y = Math.max(0, Math.min(H - 1, Math.round(arr[i])));
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
 
-        // 끝점 포인트
-        const yy = Math.max(0, Math.min(H - 1, Math.round(arr[arr.length - 1] * dpr)));
-        ctx.fillStyle = connected ? pointColorForBpm(emaBpm) : "rgba(155,241,221,0.9)";
-        ctx.beginPath(); ctx.arc(W - 8 * dpr, yy, 3.2 * dpr, 0, Math.PI * 2); ctx.fill();
+        // 끝점
+        const lastY = Math.max(0, Math.min(H - 1, Math.round(arr[arr.length - 1])));
+        ctx.fillStyle = connected ? "#ffc39f" : "rgba(255,220,200,0.9)";
+        ctx.beginPath(); ctx.arc(W - 8 * dpr, lastY, 3 * dpr, 0, Math.PI * 2); ctx.fill();
       }
 
-      // ✅ R-피크 플래시 (LED 느낌)
-      if (connected) {
-        rFlashRef.current = Math.max(0, rFlashRef.current - dt * 3.2); // 빠르게 감쇠
-        if (rFlashRef.current > 0) {
-          const glow = rFlashRef.current;
-          const r = 8 * dpr + glow * 10 * dpr;
-          ctx.fillStyle = `rgba(255, 255, 255, ${0.10 * glow})`;
-          ctx.beginPath();
-          ctx.arc(W - 8 * dpr, 18 * dpr, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = `rgba(255,255,255, ${0.35 * glow})`;
-          ctx.beginPath();
-          ctx.arc(W - 8 * dpr, 18 * dpr, 3.5 * dpr, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      // 연결 안됨 오버레이(아주 옅게)
+      // 연결 안됨 오버레이
       if (!connected) {
-        ctx.fillStyle = "rgba(0,0,0,0.25)";
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
         ctx.fillRect(0, 0, W, H);
       }
 
-      // 라벨/수치
+      // 좌상단 라벨
       ctx.fillStyle = "rgba(255,255,255,0.9)";
       ctx.font = `${12 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
-      ctx.fillText("실시간 심박", 12 * dpr, 20 * dpr);
+     
 
-      ctx.fillStyle = "white";
-      ctx.font = `bold ${22 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
-      // 표시 숫자는 원 BPM(스냅샷) 기준
-      const shown = Number.isFinite(bpm) ? bpm : (connected ? null : null);
-      const txt = Number.isFinite(shown) ? `${Math.round(shown)} bpm` : (connected ? "-- bpm" : "");
-      ctx.fillText(txt, 12 * dpr, H - 14 * dpr);
+      // ⛳️ 좌측 하단의 큰 실시간 bpm 표기
+      const big = Number.isFinite(rawBpm) ? Math.round(rawBpm) : null;
+      const bigTxt = big != null ? `${big}` : (connected ? "--" : "");
+      const unit = " bpm";
+
+      // 그림자
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.6)";
+      ctx.shadowBlur = 8 * dpr;
+      ctx.shadowOffsetY = 2 * dpr;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `800 ${36 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
+      ctx.fillText(bigTxt, 12 * dpr, H - 16 * dpr);
+
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.font = `700 ${30 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
+      ctx.fillText(unit, (12 + (bigTxt.length * 22)) * dpr, H - 16 * dpr);
+      ctx.restore();
 
       if (!connected) {
         ctx.fillStyle = "#ffd4d4";
-        ctx.font = `600 ${14 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
-        ctx.fillText("워치를 연결하거나 Pulsoid 앱을 켜주세요", 12 * dpr, 40 * dpr);
+        ctx.font = `600 ${17 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
+        ctx.fillText("워치를 연결하고 Pulsoid 앱을 켜주세요", 12 * dpr, 15 * dpr);
       }
-
-      rafRef.current = requestAnimationFrame(loop);
     }
+
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [connected, dpr, bpm]);
@@ -537,7 +506,7 @@ function Heartline({ bpm, connected }) {
         width: "100%",
         maxWidth: "100%",
         overflow: "hidden",
-        minHeight: 180,
+        minHeight: 260, // ⛳️ 그래프 영역 키움
         boxSizing: "border-box",
         contain: "layout size style paint",
         isolation: "isolate",
