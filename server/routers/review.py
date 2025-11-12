@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Optional, Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body   # 👈 Body 추가!
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, or_, cast, String
 
@@ -12,7 +12,7 @@ from models import DBResult  # DBUser는 여기선 불필요
 router = APIRouter(prefix="/api", tags=["review"])
 
 def _row_to_dict(r: DBResult) -> Dict[str, Any]:
-    # 모델 필드명은 프로젝트 모델에 맞춰 조정
+    u = r.user_json or {}
     return {
         "id": r.id,
         "user_id": r.user_id,
@@ -25,6 +25,9 @@ def _row_to_dict(r: DBResult) -> Dict[str, Any]:
         "evidence": r.evidence_json,
         "created_at": getattr(r, "created_at", None),
         "updated_at": getattr(r, "updated_at", None),
+        "name": u.get("name"),
+        "sex": u.get("sex"),
+        "age": u.get("age"),
     }
 
 @router.get("/results")
@@ -32,7 +35,7 @@ def list_results(
     page: int = 1,
     size: int = 50,
     q: str = "",
-    userId: Optional[str] = None,   # ✅ /my에서 사용하는 필터
+    userId: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     if page < 1: page = 1
@@ -40,14 +43,11 @@ def list_results(
 
     query = db.query(DBResult)
 
-    # 1) userId 정밀 필터 (정확 매칭)
     if userId:
         query = query.filter(DBResult.user_id == userId)
 
-    # 2) 일반 검색(q) — 부분 문자열 검색(폴백용)
     if q:
         like = f"%{q}%"
-        # JSON 컬럼·텍스트 컬럼을 일괄 LIKE (DB 엔진에 따라 cast 필요)
         query = query.filter(
             or_(
                 DBResult.id.ilike(like),
@@ -60,13 +60,10 @@ def list_results(
             )
         )
 
-    total = query.count()
-
-    # 최신순 정렬(생성일 컬럼명에 맞춰 조정)
+    total = query.order_by(None).count()
     if hasattr(DBResult, "created_at"):
-        query = query.order_by(desc(DBResult.created_at))
+        query = query.order_by(desc(DBResult.created_at), desc(DBResult.id))
     else:
-        # 타임스탬프가 없다면 id/trace_id 정렬 등으로 대체
         query = query.order_by(desc(DBResult.id))
 
     rows = query.offset((page - 1) * size).limit(size).all()
@@ -83,3 +80,48 @@ def get_result(id_or_trace: str, db: Session = Depends(get_db)):
     if not r:
         raise HTTPException(status_code=404, detail="result not found")
     return _row_to_dict(r)
+
+# ✅ 여기가 새로 추가되는 PATCH 핸들러입니다.
+@router.patch("/results/{id_or_trace}")
+def update_result(
+    id_or_trace: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Body 예:
+    {
+      "planMd": "수정된 마크다운",
+      "status": "final"  # 허용: ready / review / final / complete
+    }
+    """
+    plan_md = payload.get("planMd", None) or payload.get("plan_md", None)
+    status  = payload.get("status", None)
+
+    if plan_md is None and status is None:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    r = (
+        db.query(DBResult)
+        .filter(or_(DBResult.id == id_or_trace, DBResult.trace_id == id_or_trace))
+        .first()
+    )
+    if not r:
+        raise HTTPException(status_code=404, detail="result not found")
+
+    if plan_md is not None:
+        r.plan_md = str(plan_md)
+
+    if status is not None:
+        allowed = {"ready", "review", "final", "complete"}  # 👈 complete도 허용
+        s = str(status).strip().lower()
+        if s not in allowed:
+            raise HTTPException(status_code=400, detail=f"invalid status: {status}")
+        # 프론트가 'complete'를 보내면 'final'로 정규화하고 싶다면 아래 한 줄로 매핑:
+        # s = "final" if s == "complete" else s
+        r.status = s
+
+    db.add(r)
+    db.commit()
+    db.refresh(r)
+    return {"ok": True, "id": r.id, "trace_id": r.trace_id, "status": r.status}

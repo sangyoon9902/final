@@ -25,10 +25,10 @@ function splitPlanMd(planMd = "") {
   if (idx < 0) return { cardsMd: planMd, adviceMd: "" };
   return { cardsMd: planMd.slice(0, idx).trim(), adviceMd: planMd.slice(idx).trim() };
 }
-function isComplete(row) {
-  return String(row?.status || "").toLowerCase() === "complete";
+ function isComplete(row) {
+   const s = String(row?.status || "").toLowerCase();
+   return s === "final" || s === "complete";
 }
-
 /* ───────── small UI helpers ───────── */
 function IdCell({ id }) {
   return (
@@ -125,7 +125,7 @@ export default function Review() {
       const { adviceMd } = splitPlanMd(planMd || "");
       const baseCards = editMode ? (draftCards || "") : splitPlanMd(planMd || "").cardsMd;
       const merged = adviceMd ? `${baseCards}\n\n${adviceMd}`.trim() : baseCards;
-      const nextStatus = "complete";
+      const nextStatus = "final"; 
       await patchResult(cur.id, { planMd: merged, status: nextStatus });
       setMsg("✅ 저장되었습니다. (status: complete)");
 

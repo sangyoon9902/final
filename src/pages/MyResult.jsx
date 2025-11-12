@@ -1,11 +1,11 @@
 // src/pages/MyResult.jsx
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { listResults, getResult } from "../api/review.js";
 import PlanCards from "../components/PlanCards.jsx";
 import PlanCalendar from "../components/PlanCalendar.jsx";
 import ReactMarkdown from "react-markdown";
 
-/* ───────── helpers (Results.jsx와 동일 규격) ───────── */
+/* ───────── helpers ───────── */
 function calcBMI(w, h) {
   const W = Number(w), H = Number(h);
   if (!W || !H) return null;
@@ -66,7 +66,7 @@ function Row({ name, value, unit, score }) {
   );
 }
 
-/** 🔎 planMd 분리 규칙 (Results.jsx와 동일) */
+/** 🔎 planMd 분리 규칙 */
 const ADVICE_MARK = "### 설문 기반 ACSM6 조언(LLM)";
 function splitPlanMd(planMd = "") {
   if (!planMd) return { cardsMd: "", adviceMd: "" };
@@ -78,11 +78,11 @@ function splitPlanMd(planMd = "") {
   };
 }
 
-// 🔐 정책: 검수 완료만 노출
+// 🔐 정책: 검수 완료만 노출 (final 기준, 과거 complete 임시 허용)
 const REQUIRE_APPROVED = true;
 function isApprovedLike(row) {
   const st = String(row?.status || "").toLowerCase();
-  return st === "complete" || row?.approved === true;
+  return st === "final" || st === "complete" || row?.approved === true;
 }
 
 export default function MyResult() {
@@ -92,15 +92,10 @@ export default function MyResult() {
   const [detail, setDetail] = useState(null);
   const [err, setErr] = useState("");
 
-  // 캘린더 컨트롤
   const [weeksCal, setWeeksCal] = useState(4);
   const [startDateCal, setStartDateCal] = useState(null);
-
-  // rx 표시 토글 (상세가 있으면 true)
   const [showRx, setShowRx] = useState(false);
-  useEffect(() => {
-    setShowRx(!!detail);
-  }, [detail]);
+  useEffect(() => { setShowRx(!!detail); }, [detail]);
 
   // 초기 검색키: 로컬 유저
   useEffect(() => {
@@ -131,13 +126,13 @@ export default function MyResult() {
           const full = await getResult(key);
           if (REQUIRE_APPROVED && !isApprovedLike(full)) {
             setItems([]); setDetail(null);
-            setErr("검수 완료(complete) 결과가 아닙니다.");
+            setErr("검수 완료(final) 결과가 아닙니다.");
             return;
           }
           setItems([full]); setDetail(full);
         } catch {
           setItems([]); setDetail(null);
-          setErr("검수 완료된 결과가 없습니다. (complete 상태만 조회됩니다)");
+          setErr("검수 완료된 결과가 없습니다. (final 상태만 조회됩니다)");
         } finally { setLoading(false); }
         return;
       }
@@ -147,7 +142,7 @@ export default function MyResult() {
       const full = await getResult(targetId);
       if (REQUIRE_APPROVED && !isApprovedLike(full)) {
         setDetail(null);
-        setErr("이 결과는 아직 검수 완료(complete)가 아닙니다.");
+        setErr("이 결과는 아직 검수 완료(final)가 아닙니다.");
         setItems(list); setLoading(false); return;
       }
       setItems(list); setDetail(full);
@@ -157,7 +152,6 @@ export default function MyResult() {
     } finally { setLoading(false); }
   }
 
-  // 상세 파생값 (Results.jsx 표기와 맞춤)
   const planMdRaw = ((detail?.planMd ?? detail?.plan_md) || "") + "";
   const { cardsMd, adviceMd } = splitPlanMd(planMdRaw || "");
 
@@ -170,12 +164,7 @@ export default function MyResult() {
   const bmi = calcBMI(weight, height);
   const bmiInfo = bmiBadge(bmi);
 
-  // 측정치 추출(백엔드 구조에 따라 유연하게)
-  const m =
-    detail?.measurements ||
-    detail?.payload?.measurements ||
-    detail?.payload?.m ||
-    {};
+  const m = detail?.measurements || detail?.payload?.measurements || detail?.payload?.m || {};
   const situp = (m?.situp_reps ?? detail?.situp_reps) ?? 0;
   const reach = (m?.reach_cm ?? detail?.reach_cm) ?? 0;
   const step_bpm = (m?.step_bpm ?? detail?.step_bpm) ?? 0;
@@ -186,12 +175,8 @@ export default function MyResult() {
   const scoreStep  = normalize(Number(step_bpm), 120, 80, true);
   const scoreVo2   = normalize(Number(vo2), 30, 55);
 
-  async function copyPlanMd() {
-    try { await navigator.clipboard.writeText(planMdRaw || ""); } catch {}
-  }
-  async function copyAdviceMd() {
-    try { await navigator.clipboard.writeText(adviceMd || ""); } catch {}
-  }
+  async function copyPlanMd() { try { await navigator.clipboard.writeText(planMdRaw || ""); } catch {} }
+  async function copyAdviceMd() { try { await navigator.clipboard.writeText(adviceMd || ""); } catch {} }
   function handlePrint() { window.print(); }
 
   const hasPlan = !!planMdRaw;
@@ -204,7 +189,7 @@ export default function MyResult() {
           <input
             value={searchKey}
             onChange={(e)=>setSearchKey(e.target.value)}
-            placeholder="예) 1570bb49-...  또는  e7a0c4ce-...  또는  usr_1234abcd"
+            placeholder="예) 1570bb49-...  또는  usr_1234abcd"
             style={{ flex:1, border:"1px solid #cbd5e1", borderRadius:10, padding:"10px 12px", height:44 }}
             onKeyDown={(e)=>{ if(e.key === "Enter") doSearch(); }}
           />
@@ -220,8 +205,8 @@ export default function MyResult() {
         {err && <div style={{ ...styles.errorBox, marginTop: 12 }}>{err}</div>}
       </div>
 
-      {/* 결과 카드 (Results.jsx와 동일 UI) */}
-      {showRx && (
+      {/* 결과 카드 */}
+      {hasPlan && (
         <div style={styles.rxCard}>
           {/* 헤더 */}
           <div style={styles.rxHeader}>
@@ -298,15 +283,7 @@ export default function MyResult() {
             </div>
 
             <div style={styles.planBody}>
-              {hasPlan ? (
-                typeof PlanCards === "function" ? (
-                  <PlanCards planMd={cardsMd || planMdRaw} />
-                ) : null
-              ) : (
-                <div style={{ color: "#64748b", fontSize: 14 }}>
-                  plan_md가 비어 있습니다.
-                </div>
-              )}
+              <PlanCards planMd={cardsMd || planMdRaw} />
             </div>
 
             <div style={styles.footer}>
@@ -318,7 +295,7 @@ export default function MyResult() {
           </section>
 
           {/* 설문 기반 조언 */}
-          {hasPlan && adviceMd && (
+          {adviceMd && (
             <section style={styles.advicePanel}>
               <div style={styles.adviceHeader}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -330,18 +307,7 @@ export default function MyResult() {
                 </div>
               </div>
               <div style={styles.adviceBody}>
-                <ReactMarkdown
-                  components={{
-                    h3: ({node, ...props}) => <h3 style={{margin:"14px 0 6px"}} {...props} />,
-                    h4: ({node, ...props}) => <h4 style={{margin:"10px 0 4px"}} {...props} />,
-                    li: ({node, ...props}) => <li style={{margin:"4px 0"}} {...props} />,
-                    code: ({node, inline, ...props}) =>
-                      inline ? <code style={{background:"#f8fafc", padding:"2px 6px", borderRadius:6}} {...props} /> :
-                      <pre style={{background:"#0f172a", color:"#e2e8f0", padding:12, borderRadius:10, overflow:"auto"}}><code {...props} /></pre>
-                  }}
-                >
-                  {adviceMd}
-                </ReactMarkdown>
+                <ReactMarkdown>{adviceMd}</ReactMarkdown>
                 <div style={styles.noticeLine}>
                   ※ 본 조언은 일반적 정보이며, 증상 발현 시 즉시 중단하고 전문가와 상담하세요.
                 </div>
@@ -350,54 +316,46 @@ export default function MyResult() {
           )}
 
           {/* 캘린더 */}
-          {hasPlan && (
-            <section style={styles.planPanel}>
-              <div style={styles.planHeader}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={styles.planDot} />
-                  <h3 style={{ margin: 0, fontSize: 18 }}>주간 계획표 (캘린더)</h3>
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <button
-                    style={{ ...styles.ghostBtn, boxShadow: weeksCal===4 ? "inset 0 0 0 1px #cbd5e1" : "none" }}
-                    onClick={() => setWeeksCal(4)}
-                  >4주</button>
-                  <button
-                    style={{ ...styles.ghostBtn, boxShadow: weeksCal===6 ? "inset 0 0 0 1px #cbd5e1" : "none" }}
-                    onClick={() => setWeeksCal(6)}
-                  >6주</button>
-                  <input
-                    type="date"
-                    style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px" }}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setStartDateCal(v ? new Date(v + "T09:00:00") : null);
-                    }}
-                  />
-                </div>
+          <section style={styles.planPanel}>
+            <div style={styles.planHeader}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={styles.planDot} />
+                <h3 style={{ margin: 0, fontSize: 18 }}>주간 계획표 (캘린더)</h3>
               </div>
-              <div style={{ padding: 12 }}>
-                {typeof PlanCalendar === "function" ? (
-                  <PlanCalendar
-                    planMd={planMdRaw}
-                    weeks={weeksCal}
-                    startDate={startDateCal || undefined}
-                  />
-                ) : (
-                  <div style={{ color: "#64748b", fontSize: 14 }}>
-                    PlanCalendar 컴포넌트를 사용할 수 없습니다.
-                  </div>
-                )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  style={{ ...styles.ghostBtn, boxShadow: weeksCal===4 ? "inset 0 0 0 1px #cbd5e1" : "none" }}
+                  onClick={() => setWeeksCal(4)}
+                >4주</button>
+                <button
+                  style={{ ...styles.ghostBtn, boxShadow: weeksCal===6 ? "inset 0 0 0 1px #cbd5e1" : "none" }}
+                  onClick={() => setWeeksCal(6)}
+                >6주</button>
+                <input
+                  type="date"
+                  style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px" }}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setStartDateCal(v ? new Date(v + "T09:00:00") : null);
+                  }}
+                />
               </div>
-            </section>
-          )}
+            </div>
+            <div style={{ padding: 12 }}>
+              <PlanCalendar
+                planMd={planMdRaw}
+                weeks={weeksCal}
+                startDate={startDateCal || undefined}
+              />
+            </div>
+          </section>
         </div>
       )}
     </div>
   );
 }
 
-/* ───────── styles (Results.jsx와 동일 객체) ───────── */
+/* ───────── styles ───────── */
 const styles = {
   container: {
     maxWidth: 960,

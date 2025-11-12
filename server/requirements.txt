@@ -23,3 +23,4 @@ openai>=1.52,<2
 # --- (옵션) 필요할 때만 ---
 scikit-learn==1.5.1
 httpx>=0.25,<0.28
+psycopg2-binary>=2.9
