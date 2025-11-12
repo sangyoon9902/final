@@ -230,7 +230,7 @@ export default function MeasureStep() {
       />
 
       <div style={{ display:"flex", flexWrap:"wrap", gap:12, marginBottom:12, fontSize:12 }}>
-        <Pill>모드 {mode==="auto"?"자동":"수수동"}</Pill>
+        <Pill>모드 {mode==="auto"?"자동":"수수수수동"}</Pill>
         <Pill>현재 HR {Number.isFinite(hrBpm)?`${hrBpm} bpm`:"--"}</Pill>
         {Number.isFinite(restingBpm) && <Pill>안정심박 {restingBpm} bpm</Pill>}
         {phase === "done" && (
