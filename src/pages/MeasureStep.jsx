@@ -306,7 +306,7 @@ function Heartline({ bpm, connected }) {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
   const rafRef = useRef(0);
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const dpr = Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
 
   const samplesRef = useRef([]);
   const capacityRef = useRef(0);
@@ -339,11 +339,21 @@ function Heartline({ bpm, connected }) {
     }
     resize();
     let raf;
-    const ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(resize); });
-    if (wrapRef.current) ro.observe(wrapRef.current);
+    let ro;
+
+    const hasResizeObserver = typeof ResizeObserver !== "undefined";
+    if (hasResizeObserver) {
+      ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(resize); });
+      if (wrapRef.current) ro.observe(wrapRef.current);
+    }
     window.addEventListener("resize", resize);
-    return () => { ro.disconnect(); window.removeEventListener("resize", resize); cancelAnimationFrame(raf); };
-  }, [dpr]);
+
+    return () => {
+      if (hasResizeObserver) ro?.disconnect();
+      window.removeEventListener("resize", resize);
+      cancelAnimationFrame(raf);
+    };
+    }, [dpr]);
 
   useEffect(() => {
     const cvs = canvasRef.current; if (!cvs) return;
