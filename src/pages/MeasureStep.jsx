@@ -10,6 +10,18 @@ import {
 } from "../logic/stepLogic";
 import { formatMMSS } from "../utils/format";
 
+// ✅ ecgShape 함수를 컴포넌트 밖, 파일 상단으로 이동
+function ecgShape(p) {
+  let y = 0;
+  if (p > 0.03 && p <= 0.08) y += Math.sin(((p - 0.03) / 0.05) * Math.PI) * 0.25; // P
+  if (p > 0.10 && p <= 0.115) y -= Math.sin(((p - 0.10) / 0.015) * Math.PI) * 1.2; // Q
+  if (p > 0.115 && p <= 0.135) y += Math.sin(((p - 0.115) / 0.02) * Math.PI) * 2.6; // R
+  if (p > 0.135 && p <= 0.155) y -= Math.sin(((p - 0.135) / 0.02) * Math.PI) * 1.4; // S
+  if (p > 0.22 && p <= 0.36) y += Math.sin(((p - 0.22) / 0.14) * Math.PI) * 0.6; // T
+  y += (Math.random() - 0.5) * 0.02; // 미세 노이즈
+  return y;
+}
+
 const STEP_AUDIO_SRC = "/audio/step-beat.mp3";
 const PULSOID_API_BASE = import.meta?.env?.VITE_PULSOID_PROXY || "http://localhost:3001";
 const USE_GUIDED_FLOW = true;
@@ -19,8 +31,8 @@ export default function MeasureStep() {
   const nav = useNavigate();
   const { setSession } = useApp();
 
-  const [mode, setMode] = useState("auto");              // 'auto' | 'manual'
-  const [phase, setPhase] = useState("idle");            // idle | prestep | stepping | recovery | count10 | count10_done | done
+  const [mode, setMode] = useState("auto"); // 'auto' | 'manual'
+  const [phase, setPhase] = useState("idle"); // idle | prestep | stepping | recovery | count10 | count10_done | done
   const phaseRef = useRef(phase);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -359,16 +371,7 @@ function Heartline({ bpm, connected }) {
     const cvs = canvasRef.current; if (!cvs) return;
     const ctx = cvs.getContext("2d"); ctx.lineJoin = "round"; ctx.lineCap = "round";
 
-    function ecgShape(p) {
-      let y = 0;
-      if (p > 0.03 && p <= 0.08)  y += Math.sin(((p - 0.03) / 0.05) * Math.PI) * 0.25;  // P
-      if (p > 0.10 && p <= 0.115) y -= Math.sin(((p - 0.10) / 0.015) * Math.PI) * 1.2; // Q
-      if (p > 0.115 && p <= 0.135) y += Math.sin(((p - 0.115)/ 0.02) * Math.PI) * 2.6; // R
-      if (p > 0.135 && p <= 0.155) y -= Math.sin(((p - 0.135)/ 0.02) * Math.PI) * 1.4; // S
-      if (p > 0.22 && p <= 0.36)  y += Math.sin(((p - 0.22) / 0.14) * Math.PI) * 0.6;  // T
-      y += (Math.random() - 0.5) * 0.02; // 미세 노이즈
-      return y;
-    }
+    // ❌ useEffect 내부에 있던 ecgShape 정의 제거
 
     function loop(ts) {
       const now = ts || performance.now();
@@ -388,6 +391,7 @@ function Heartline({ bpm, connected }) {
         // 실제 ECG 형태
         phaseRef.current += speed; if (phaseRef.current >= 1) phaseRef.current -= 1;
         const amp = (H / dpr) * 0.28;
+        // ✅ 파일 상단에 정의된 ecgShape 함수 사용
         const y = baseline - ecgShape(phaseRef.current) * amp;
         if (arr.length >= capacityRef.current && arr.length > 0) { arr.shift(); arr.push(y); }
       } else {
@@ -469,7 +473,7 @@ function Heartline({ bpm, connected }) {
         width: "100%",
         maxWidth: "100%",
         overflow: "hidden",
-        minHeight: 180,                // 보기 좋은 기본 높이
+        minHeight: 180, // 보기 좋은 기본 높이
         // ✅ 레이아웃 격리
         boxSizing: "border-box",
         contain: "layout size style paint",
@@ -485,37 +489,37 @@ function Heartline({ bpm, connected }) {
 /* ───────── 리본: scaleX 기반 + 좌우 여백 지정 ───────── */
 function FlowRibbon({ phase, mode, stepTimer, recoveryTimer, count10Timer }) {
   const base = [
-    { id: "connect",  label: "연결/입력" },
-    { id: "guide",    label: "안내" },
+    { id: "connect", label: "연결/입력" },
+    { id: "guide", label: "안내" },
     { id: "stepping", label: "3분 스텝검사" },
-    { id: "rest",     label: "1분 휴식" },
+    { id: "rest", label: "1분 휴식" },
   ];
   const tail = mode === "manual"
     ? { id: "manual", label: "10초 심박수 측정" }
-    : { id: "auto",   label: "심박수 자동 측정" };
+    : { id: "auto", label: "심박수 자동 측정" };
   const steps = [...base, tail];
 
   const currentId =
-    phase === "idle"         ? "connect"  :
-    phase === "prestep"      ? "guide"    :
-    phase === "stepping"     ? "stepping" :
-    phase === "recovery"     ? "rest"     :
-    phase === "count10"      ? "manual"   :
-    phase === "count10_done" ? "manual"   :
-    phase === "done"         ? (mode === "manual" ? "manual" : "auto")
-                              : "connect";
+    phase === "idle" ? "connect" :
+    phase === "prestep" ? "guide" :
+    phase === "stepping" ? "stepping" :
+    phase === "recovery" ? "rest" :
+    phase === "count10" ? "manual" :
+    phase === "count10_done" ? "manual" :
+    phase === "done" ? (mode === "manual" ? "manual" : "auto")
+                      : "connect";
 
   const idx = Math.max(0, steps.findIndex(s => s.id === currentId));
   const fill = Math.min(1, (idx + 0.5) / steps.length);
 
   const rightText =
-    phase === "idle"         ? "준비되면 ‘스텝검사 시작’을 눌러주세요" :
-    phase === "prestep"      ? "안내 중…" :
-    phase === "stepping"     ? `스텝 남은 시간 ${formatMMSS(stepTimer)}` :
-    phase === "recovery"     ? `휴식 남은 시간 ${formatMMSS(recoveryTimer)}` :
-    (mode === "manual" && phase === "count10")      ? `10초 카운트 남은 00:${String(count10Timer).padStart(2,"0")}` :
+    phase === "idle" ? "준비되면 ‘스텝검사 시작’을 눌러주세요" :
+    phase === "prestep" ? "안내 중…" :
+    phase === "stepping" ? `스텝 남은 시간 ${formatMMSS(stepTimer)}` :
+    phase === "recovery" ? `휴식 남은 시간 ${formatMMSS(recoveryTimer)}` :
+    (mode === "manual" && phase === "count10") ? `10초 카운트 남은 00:${String(count10Timer).padStart(2,"0")}` :
     (mode === "manual" && phase === "count10_done") ? "방금 센 박동 수를 입력해주세요" :
-    phase === "done"         ? "측정 완료 ✅" : "";
+    phase === "done" ? "측정 완료 ✅" : "";
 
   return (
     <div style={{ marginBottom:12, width:"100%", maxWidth:"100%", overflow:"hidden", boxSizing:"border-box" }}>
