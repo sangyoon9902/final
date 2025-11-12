@@ -230,7 +230,7 @@ export default function MeasureStep() {
       />
 
       <div style={{ display:"flex", flexWrap:"wrap", gap:12, marginBottom:12, fontSize:12 }}>
-        <Pill>모드 {mode==="auto"?"자동":"수수수수동"}</Pill>
+        <Pill>모드 {mode==="auto"?"자동":"수동"}</Pill>
         <Pill>현재 HR {Number.isFinite(hrBpm)?`${hrBpm} bpm`:"--"}</Pill>
         {Number.isFinite(restingBpm) && <Pill>안정심박 {restingBpm} bpm</Pill>}
         {phase === "done" && (
@@ -313,7 +313,7 @@ export default function MeasureStep() {
   );
 }
 
-/* ───────── Heartline: 캔버스 ECG 스타일 (연결 없어도 직선 파형 유지) ───────── */
+/* ───────── Heartline: 캔버스 ECG 스타일 (가시성 강화 버전) ───────── */
 function Heartline({ bpm, connected }) {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
@@ -324,8 +324,37 @@ function Heartline({ bpm, connected }) {
   const capacityRef = useRef(0);
   const phaseRef = useRef(0);
   const lastTsRef = useRef(0);
-  const bpmRef = useRef(bpm || 60);
-  useEffect(() => { if (Number.isFinite(bpm) && bpm > 0) bpmRef.current = bpm; }, [bpm]);
+
+  // ✅ 실시간 bpm은 그대로 유지하되, 시각화용으로는 EMA로 살짝 스무딩
+  const bpmEmaRef = useRef(Number.isFinite(bpm) ? bpm : 60);
+  const bpmRef = useRef(Number.isFinite(bpm) ? bpm : 60);
+  useEffect(() => {
+    if (Number.isFinite(bpm) && bpm > 0) {
+      bpmRef.current = bpm;
+      const alpha = 0.15; // 반응성 ↑ (0.1~0.2 권장)
+      bpmEmaRef.current = bpmEmaRef.current * (1 - alpha) + bpm * alpha;
+    }
+  }, [bpm]);
+
+  // ✅ R-피크 순간 플래시 효과
+  const rFlashRef = useRef(0); // 0~1
+  const wasInRRef = useRef(false);
+
+  // 작은 도우미
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  // ✅ BPM에 따른 색상(살짝만 변화: 차분한 청록→연녹→황록)
+  function strokeColorForBpm(b) {
+    const t = clamp((b - 50) / (160 - 50), 0, 1); // 50→160 범위 맵핑
+    const hue = lerp(170, 80, t);                 // 170(청록) → 80(연녹)
+    return `hsl(${hue} 80% 70%)`;
+  }
+  function pointColorForBpm(b) {
+    const t = clamp((b - 50) / (160 - 50), 0, 1);
+    const hue = lerp(170, 90, t);
+    return `hsl(${hue} 90% 78%)`;
+  }
 
   useLayoutEffect(() => {
     function resize() {
@@ -333,7 +362,7 @@ function Heartline({ bpm, connected }) {
       if (!cvs || !box) return;
 
       const wCss = Math.max(320, Math.round(box.width));
-      const hCss = 160; // 살짝 키워서 보기 좋게
+      const hCss = 170; // 살짝 키움
 
       const curW = parseInt(cvs.style.width || "0", 10);
       const curH = parseInt(cvs.style.height || "0", 10);
@@ -365,13 +394,11 @@ function Heartline({ bpm, connected }) {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(raf);
     };
-    }, [dpr]);
+  }, [dpr]);
 
   useEffect(() => {
     const cvs = canvasRef.current; if (!cvs) return;
     const ctx = cvs.getContext("2d"); ctx.lineJoin = "round"; ctx.lineCap = "round";
-
-    // ❌ useEffect 내부에 있던 ecgShape 정의 제거
 
     function loop(ts) {
       const now = ts || performance.now();
@@ -379,24 +406,39 @@ function Heartline({ bpm, connected }) {
       const dt = Math.min(0.060, (now - last) / 1000);
       lastTsRef.current = now;
 
-      const targetBpm = Math.min(220, Math.max(30, bpmRef.current || 60));
-      const beatInterval = 60 / targetBpm;
-      const speed = dt / beatInterval;
+      // ✅ 시각화는 EMA BPM을 기준으로 (작은 변화도 눈에 띄게)
+      const emaBpm = clamp(bpmEmaRef.current || 60, 30, 220);
+
+      // ✅ 속도와 진폭 모두 BPM에 의존시켜 변화가 확실히 보이게
+      const beatInterval = 60 / emaBpm;
+      const speed = dt / beatInterval;                      // 기본 속도
+      const speedBoost = 1 + (emaBpm - 60) / 220 * 0.35;    // 고BPM일수록 약간 더 빠르게
+      const visualSpeed = speed * speedBoost;
 
       const W = cvs.width, H = cvs.height;
       const baseline = (H / dpr) * 0.5;
       const arr = samplesRef.current;
 
-      if (connected && Number.isFinite(targetBpm)) {
-        // 실제 ECG 형태
-        phaseRef.current += speed; if (phaseRef.current >= 1) phaseRef.current -= 1;
-        const amp = (H / dpr) * 0.28;
-        // ✅ 파일 상단에 정의된 ecgShape 함수 사용
+      // ✅ 진폭: BPM에 따라 0.85~1.35배 (작은 변화도 시각적 차이)
+      const ampBase = (H / dpr) * 0.26;
+      const ampScale = clamp(0.85 + (emaBpm - 60) / 220 * 0.5, 0.85, 1.35);
+      const amp = ampBase * ampScale;
+
+      if (connected && Number.isFinite(emaBpm)) {
+        phaseRef.current += visualSpeed;
+        if (phaseRef.current >= 1) phaseRef.current -= 1;
+
+        // ✅ R-피크(0.115~0.135)에서 플래시 트리거
+        const inR = phaseRef.current > 0.115 && phaseRef.current <= 0.135;
+        if (inR && !wasInRRef.current) {
+          rFlashRef.current = 1; // 점등
+        }
+        wasInRRef.current = inR;
+
         const y = baseline - ecgShape(phaseRef.current) * amp;
         if (arr.length >= capacityRef.current && arr.length > 0) { arr.shift(); arr.push(y); }
       } else {
-        // ✅ 연결 X: 기준선으로 “쭉 가는” 파형 (아주 미세한 흔들림만)
-        const tiny = (Math.random() - 0.5) * (H / dpr) * 0.008; // 거의 직선
+        const tiny = (Math.random() - 0.5) * (H / dpr) * 0.008;
         const y = baseline + tiny;
         if (arr.length >= capacityRef.current && arr.length > 0) { arr.shift(); arr.push(y); }
       }
@@ -418,7 +460,8 @@ function Heartline({ bpm, connected }) {
 
       // 파형
       if (arr.length > 1) {
-        ctx.strokeStyle = connected ? "#70e1c8" : "rgba(112,225,200,0.75)";
+        const stroke = connected ? strokeColorForBpm(emaBpm) : "rgba(112,225,200,0.75)";
+        ctx.strokeStyle = stroke;
         ctx.lineWidth = 2 * dpr;
         ctx.beginPath(); const leftPad = 6 * dpr;
         for (let i = 0; i < arr.length; i++) {
@@ -427,9 +470,28 @@ function Heartline({ bpm, connected }) {
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
+
+        // 끝점 포인트
         const yy = Math.max(0, Math.min(H - 1, Math.round(arr[arr.length - 1] * dpr)));
-        ctx.fillStyle = connected ? "#9bf1dd" : "rgba(155,241,221,0.9)";
+        ctx.fillStyle = connected ? pointColorForBpm(emaBpm) : "rgba(155,241,221,0.9)";
         ctx.beginPath(); ctx.arc(W - 8 * dpr, yy, 3.2 * dpr, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // ✅ R-피크 플래시 (LED 느낌)
+      if (connected) {
+        rFlashRef.current = Math.max(0, rFlashRef.current - dt * 3.2); // 빠르게 감쇠
+        if (rFlashRef.current > 0) {
+          const glow = rFlashRef.current;
+          const r = 8 * dpr + glow * 10 * dpr;
+          ctx.fillStyle = `rgba(255, 255, 255, ${0.10 * glow})`;
+          ctx.beginPath();
+          ctx.arc(W - 8 * dpr, 18 * dpr, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = `rgba(255,255,255, ${0.35 * glow})`;
+          ctx.beginPath();
+          ctx.arc(W - 8 * dpr, 18 * dpr, 3.5 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       // 연결 안됨 오버레이(아주 옅게)
@@ -438,14 +500,16 @@ function Heartline({ bpm, connected }) {
         ctx.fillRect(0, 0, W, H);
       }
 
-      // 라벨/수치 (맨 위에)
+      // 라벨/수치
       ctx.fillStyle = "rgba(255,255,255,0.9)";
       ctx.font = `${12 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
       ctx.fillText("실시간 심박", 12 * dpr, 20 * dpr);
 
       ctx.fillStyle = "white";
       ctx.font = `bold ${22 * dpr}px system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif`;
-      const txt = Number.isFinite(bpm) ? `${Math.round(bpm)} bpm` : (connected ? "-- bpm" : "");
+      // 표시 숫자는 원 BPM(스냅샷) 기준
+      const shown = Number.isFinite(bpm) ? bpm : (connected ? null : null);
+      const txt = Number.isFinite(shown) ? `${Math.round(shown)} bpm` : (connected ? "-- bpm" : "");
       ctx.fillText(txt, 12 * dpr, H - 14 * dpr);
 
       if (!connected) {
@@ -473,8 +537,7 @@ function Heartline({ bpm, connected }) {
         width: "100%",
         maxWidth: "100%",
         overflow: "hidden",
-        minHeight: 180, // 보기 좋은 기본 높이
-        // ✅ 레이아웃 격리
+        minHeight: 180,
         boxSizing: "border-box",
         contain: "layout size style paint",
         isolation: "isolate",
