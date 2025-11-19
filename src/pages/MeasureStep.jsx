@@ -310,8 +310,8 @@ function Heartline({ bpm, connected }) {
   const dpr = Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
 
   // 설정: y축 스케일 (bpm)
-  const Y_MIN = 40;
-  const Y_MAX = 180;
+  const Y_MIN = 50;
+  const Y_MAX = 150;
 
   // 데이터 버퍼
   const samplesRef = useRef([]);     // y값(pixel) 배열

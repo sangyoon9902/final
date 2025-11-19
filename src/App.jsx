@@ -12,42 +12,55 @@ export default function App() {
     return null;
   })();
 
-  const selectLabel = inMeasure && measureName ? `현재: ${measureName}` : "종목선택";
+  const selectLabel =
+    inMeasure && measureName ? `현재: ${measureName}` : "종목선택";
 
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateRows: "64px 1fr",
-      minHeight: "100vh",
-      backgroundColor: "#060b24ff",
-      color: "#fff",
-      fontFamily: "system-ui,sans-serif",
-    }}>
-      <header style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 16px",
-        borderBottom: "1px solid #1a2550",
-        backgroundColor: "#09091cff",
-        height: "64px",
-      }}>
-        <strong>🏋️ AI Fitness</strong>
-        <nav style={{
+    <div
+      style={{
+        display: "grid",
+        gridTemplateRows: "64px 1fr",
+        minHeight: "100vh",
+        backgroundColor: "#060b24ff",
+        color: "#fff",
+        fontFamily: "system-ui,sans-serif",
+      }}
+    >
+      <header
+        style={{
           display: "flex",
-          flexWrap: "wrap",
-          gap: 12,
-          fontSize: "13px",
-          lineHeight: 1.3,
-        }}>
-          {/* 순서: 시작 → 설문1~4 → 종목선택(동적 라벨) → 결과 */}
-          <NavBtn to="/">시작</NavBtn>
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 16px",
+          borderBottom: "1px solid #1a2550",
+          backgroundColor: "#09091cff",
+          height: "64px",
+        }}
+      >
+        {/* 상단 서비스 타이틀 */}
+        <strong>🏋️ AI Fitness</strong>
+
+        {/* 상단 네비게이션 */}
+        <nav
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 12,
+            fontSize: "13px",
+            lineHeight: 1.3,
+          }}
+        >
+          {/* 순서: 시작하기(첫 페이지) → 개인정보 입력 → 설문1~4 → 종목선택(동적) → 결과 */}
+          <NavBtn to="/">시작하기</NavBtn>
+          <NavBtn to="/start">개인정보 입력</NavBtn>
           <NavBtn to="/survey1">설문1</NavBtn>
           <NavBtn to="/survey2">설문2</NavBtn>
           <NavBtn to="/survey3">설문3</NavBtn>
           <NavBtn to="/survey4">설문4</NavBtn>
           {/* /measure/* 에 있을 때도 활성화되도록 activeOverride 전달 */}
-          <NavBtn to="/select" activeOverride={inMeasure}>{selectLabel}</NavBtn>
+          <NavBtn to="/select" activeOverride={inMeasure}>
+            {selectLabel}
+          </NavBtn>
           <NavBtn to="/results">AI 운동처방</NavBtn>
         </nav>
       </header>
@@ -59,7 +72,7 @@ export default function App() {
   );
 }
 
-/* ───────── NavBtn: activeOverride 추가 ───────── */
+/* ───────── NavBtn: activeOverride 지원 ───────── */
 function NavBtn({ to, children, activeOverride = false }) {
   const loc = useLocation();
   const computedActive =

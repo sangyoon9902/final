@@ -176,8 +176,8 @@ export default function Start() {
           --gap-col:15px; --gap-row:10px;
         }
         .page{ min-height:100vh; display:flex; flex-direction:column; align-items:center;
-               background:linear-gradient(180deg,#e8f0ff 0%,#ffffff 100%); padding:32px 16px; text-align:center; }
-        .title{ font-size:2.6rem; font-weight:900; color:#082c7a; margin:0 0 14px }
+               background:#0b1a33; padding:32px 16px; text-align:center; }
+        .title{ font-size:2.6rem; font-weight:900; color:#ffffff; margin:0 0 14px }
         .card{ width:100%; max-width:760px; background:#fff; border-radius:28px;
                box-shadow:0 18px 52px rgba(0,0,0,.10); padding:36px; text-align:left; }
         .grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr));
@@ -247,7 +247,7 @@ export default function Start() {
       `}</style>
 
       <h1 className="title">국민체력 100 간편측정</h1>
-      <img src="/character.png" alt="캐릭터" style={{ width: 184, height: "auto", marginBottom: 18 }} />
+      <img src="/start-characters.png" alt="캐릭터" style={{ width: 500, height: "auto", marginBottom: 2 }} />
 
       <form className="card" onSubmit={handleStart}>
         {err && <div className="error">{err}</div>}
@@ -324,7 +324,7 @@ export default function Start() {
         <p className="hint">입력값은 브라우저 로컬과 앱 상태에 저장되며, id는 서버에서 1회 발급됩니다.</p>
       </form>
 
-      <p style={{ marginTop: 18, color: "#666", fontSize: "0.9rem" }}>
+      <p style={{ marginTop: 18, color: "#ffffffff", fontSize: "0.9rem" }}>
         AI 피트니스 코칭 기반 국민체력 100 온라인 운동 코칭 서비스
       </p>
 

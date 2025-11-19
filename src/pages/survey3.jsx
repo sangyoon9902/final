@@ -1,8 +1,8 @@
 // src/pages/Survey3.jsx
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp } from "../state/AppState"; // ✅ 추가
+import { useApp } from "../state/AppState";
 
 /**
  * Survey3 – 국제신체활동설문지(IPAQ) 요약형 (3/4)
@@ -14,7 +14,7 @@ import { useApp } from "../state/AppState"; // ✅ 추가
  */
 export default function Survey3() {
   const navigate = useNavigate();
-  const { setSurveys } = useApp(); // ✅ 전역 setter
+  const { surveys, setSurveys } = useApp();
 
   const dayOptions = useMemo(() => Array.from({ length: 8 }, (_, i) => i), []);
   const hourOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => i), []);
@@ -40,11 +40,15 @@ export default function Survey3() {
 
   const [sitHour, setSitHour] = useState(0);
   const [sitMin, setSitMin] = useState(0);
-  const [place, setPlace] = useState("");
+
+  // ✅ 주로 운동하는 장소는 "비제어 + ref" 로 관리 (연속 입력 문제 피하기)
+  const placeRef = useRef(null);
+  const [defaultPlace, setDefaultPlace] = useState(""); // 초기값만 저장
 
   const [touched, setTouched] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
-  // 공통 스타일 (TimePicker, Row 등에서 씀)
+  // 공통 스타일
   const wrap = { maxWidth: 980, margin: "40px auto", padding: "0 16px" };
   const card = {
     border: "1px solid #c9d4ff",
@@ -60,6 +64,72 @@ export default function Survey3() {
     minWidth: 80,
   };
 
+  // ✅ 기존 응답 복원 (처음 들어올 때 한 번만)
+  useEffect(() => {
+    if (initialized) return;
+
+    let saved = surveys?.survey3;
+    if (!saved) {
+      const fromLS = JSON.parse(localStorage.getItem("survey") || "{}");
+      saved = fromLS.survey3;
+    }
+    if (!saved) {
+      setInitialized(true);
+      return;
+    }
+
+    // 직업
+    if (saved.job_type) {
+      if (["활동적", "비활동적", "기타"].includes(saved.job_type)) {
+        setJobType(saved.job_type);
+      } else {
+        setJobType("기타");
+        setJobEtc(saved.job_type);
+      }
+    }
+
+    // 고강도
+    if (saved.vigorous) {
+      setVigNone(!!saved.vigorous.none);
+      setVigDays(saved.vigorous.days || 0);
+      const vMin = saved.vigorous.min_per_day || 0;
+      setVigHour(Math.floor(vMin / 60));
+      setVigMin(vMin % 60);
+    }
+
+    // 중강도
+    if (saved.moderate) {
+      setModNone(!!saved.moderate.none);
+      setModDays(saved.moderate.days || 0);
+      const mMin = saved.moderate.min_per_day || 0;
+      setModHour(Math.floor(mMin / 60));
+      setModMin(mMin % 60);
+    }
+
+    // 걷기
+    if (saved.walking) {
+      setWalkNone(!!saved.walking.none);
+      setWalkDays(saved.walking.days || 0);
+      const wMin = saved.walking.min_per_day || 0;
+      setWalkHour(Math.floor(wMin / 60));
+      setWalkMin(wMin % 60);
+    }
+
+    // 앉은 시간
+    if (typeof saved.sitting_min_per_day === "number") {
+      const sMin = saved.sitting_min_per_day;
+      setSitHour(Math.floor(sMin / 60));
+      setSitMin(sMin % 60);
+    }
+
+    // ✅ 운동 장소 초기값만 따로 저장 (비제어 input의 defaultValue로 사용)
+    if (typeof saved.main_place === "string") {
+      setDefaultPlace(saved.main_place);
+    }
+
+    setInitialized(true);
+  }, [initialized, surveys]);
+
   // 유효성 검사
   const isValid = useMemo(() => {
     // 직업
@@ -73,22 +143,7 @@ export default function Survey3() {
     // 걷기
     if (!walkNone && (walkDays <= 0 || walkHour + walkMin === 0)) return false;
 
-    // 고강도, 중강도, 걷기 중 하나는 입력되어야 함 (모두 '안한다'인 경우는 괜찮음)
-    if (vigNone && modNone && walkNone) {
-      // 모두 '안한다'면 유효함
-    } else {
-      // '안한다'가 아닌 항목 중 하나라도 유효한 값이 있어야 함
-      let validActivity = false;
-      if (!vigNone && vigDays > 0 && vigHour + vigMin > 0) validActivity = true;
-      if (!modNone && modDays > 0 && modHour + modMin > 0) validActivity = true;
-      if (!walkNone && walkDays > 0 && walkHour + walkMin > 0) validActivity = true;
-
-      // '안한다' 체크 안 한 항목이 있는데 값이 유효하지 않으면 false
-      if (!vigNone && (vigDays <= 0 || vigHour + vigMin === 0)) return false;
-      if (!modNone && (modDays <= 0 || modHour + modMin === 0)) return false;
-      if (!walkNone && (walkDays <= 0 || walkHour + walkMin === 0)) return false;
-    }
-
+    // 모두 '안한다'인 경우는 OK, 그 외는 각 항목 검증은 위에서 이미 처리
     return true;
   }, [
     jobType,
@@ -141,7 +196,7 @@ export default function Survey3() {
           color: "#d33",
           fontSize: 13,
           marginTop: 6,
-          padding: "0 18px", // Error 메시지도 padding 적용
+          padding: "0 18px",
         }}
       >
         {children}
@@ -186,7 +241,7 @@ export default function Survey3() {
           display: "grid",
           gridTemplateColumns: "60px 1fr 1fr",
           gap: 16,
-          alignItems: "center", // 세로 중앙 정렬
+          alignItems: "center",
         }}
       >
         <div style={{ fontWeight: 700 }}>{no}</div>
@@ -201,7 +256,8 @@ export default function Survey3() {
     setTouched(true);
     if (!isValid) return;
 
-    // 이 설문 페이지의 결과를 payload로 정리
+    const placeValue = placeRef.current?.value || "";
+
     const payload = {
       job_type: jobType === "기타" ? jobEtc.trim() : jobType,
       vigorous: {
@@ -220,35 +276,32 @@ export default function Survey3() {
         none: walkNone,
       },
       sitting_min_per_day: sitHour * 60 + sitMin,
-      main_place: place.trim(),
+      main_place: placeValue.trim(), // ✅ ref로부터 읽음
     };
 
-    // 1) localStorage에도 계속 쌓아주기 (기존 호환성 유지)
     const prev = JSON.parse(localStorage.getItem("survey") || "{}");
     localStorage.setItem(
       "survey",
       JSON.stringify({ ...prev, survey3: payload })
     );
 
-    // 2) 전역(AppProvider.surveys)에도 저장
     setSurveys((prevAll) => ({
       ...prevAll,
       survey3: payload,
     }));
 
-    // 3) 다음 페이지로 이동
     navigate("/survey4");
   };
 
-  // 👇 [추가됨] 버튼 공통 스타일
+  // 버튼 공통 스타일
   const baseButtonStyle = {
-    flex: 1, // 버튼이 공간을 균등하게 차지
-    padding: "16px", // 버튼 크기 (높이) 키움
+    flex: 1,
+    padding: "16px",
     borderRadius: 10,
     border: 0,
     color: "#fff",
-    fontSize: "16px", // 폰트 크기 키움
-    fontWeight: 700, // 폰트 굵게
+    fontSize: "16px",
+    fontWeight: 700,
     cursor: "pointer",
     textAlign: "center",
   };
@@ -538,14 +591,14 @@ export default function Survey3() {
           }
         />
 
-        {/* 6) 운동 장소 */}
+        {/* 6) 운동 장소 – ✅ 비제어 input + ref */}
         <Row
           no="6"
           title="주로 운동하는 장소는 어디입니까? (필수 아님)"
           right={
             <input
-              value={place}
-              onChange={(e) => setPlace(e.target.value)}
+              ref={placeRef}
+              defaultValue={defaultPlace}
               placeholder="예: 공원, K-Pop 헬스장, 학교 체육관 등"
               style={{ ...selStyle, width: "100%" }}
             />
@@ -553,14 +606,14 @@ export default function Survey3() {
         />
       </div>
 
-      {/* 👇 [수정됨] 하단 버튼 컨테이너 */}
+      {/* 하단 버튼 */}
       <div
         style={{
           display: "flex",
-          justifyContent: "center", // 중앙 정렬
-          gap: "16px", // 버튼 사이 간격
-          marginTop: "24px", // 위쪽 여백
-          marginBottom: "12px", // 아래쪽 여백
+          justifyContent: "center",
+          gap: "16px",
+          marginTop: "24px",
+          marginBottom: "12px",
         }}
       >
         <button
@@ -568,7 +621,7 @@ export default function Survey3() {
           onClick={() => navigate("/survey2")}
           style={{
             ...baseButtonStyle,
-            background: "#45474B", // 어두운 회색
+            background: "#45474B",
           }}
         >
           이전
@@ -577,11 +630,10 @@ export default function Survey3() {
         <button
           type="button"
           onClick={handleNext}
-          disabled={!isValid && touched} // disabled 상태는 유지
+          disabled={!isValid && touched}
           style={{
             ...baseButtonStyle,
-            background: "#2B2D42", // 어두운 남색
-            // 유효하지 않을 때 투명도 조절
+            background: "#2B2D42",
             opacity: !isValid && touched ? 0.7 : 1,
           }}
         >
@@ -589,7 +641,6 @@ export default function Survey3() {
         </button>
       </div>
 
-      {/* 👇 [수정됨] 안내 문구 중앙 정렬 */}
       <p
         style={{
           marginTop: 10,
