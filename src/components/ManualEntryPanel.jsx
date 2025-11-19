@@ -121,7 +121,7 @@ export default function ManualEntryPanel() {
           <div style={styles.sectionTitle}>측정값</div>
 
           <label style={styles.row}>
-            <span style={styles.lbl}>윗몸일으키기(회)</span>
+            <span style={styles.lbl}>윗몸일으키기</span>
             <input
               style={styles.input}
               type="number"
@@ -132,7 +132,7 @@ export default function ManualEntryPanel() {
           </label>
 
           <label style={styles.row}>
-            <span style={styles.lbl}>좌전굴(cm)</span>
+            <span style={styles.lbl}>앉아윗몸앞으로굽히기</span>
             <input
               style={styles.input}
               type="number"
@@ -144,7 +144,7 @@ export default function ManualEntryPanel() {
           </label>
 
           <label style={styles.row}>
-            <span style={styles.lbl}>스텝 회복기 BPM</span>
+            <span style={styles.lbl}>스텝검사(휴식 후 심박수)</span>
             <input
               style={styles.input}
               type="number"
