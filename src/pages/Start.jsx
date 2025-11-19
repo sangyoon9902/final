@@ -321,7 +321,7 @@ export default function Start() {
           {loading ? "저장 중…" : "다음 단계로 이동"}
         </button>
 
-        <p className="hint">입력값은 브라우저 로컬과 앱 상태에 저장되며, id는 서버에서 1회 발급됩니다.</p>
+        <p className="hint">입력값은 브라우저에 저장되며, id는 서버에서 1회 발급됩니다.</p>
       </form>
 
       <p style={{ marginTop: 18, color: "#ffffffff", fontSize: "0.9rem" }}>
