@@ -129,7 +129,7 @@ export default function Select() {
     {
       id: "situp",
       title: "윗몸말아올리기",
-      desc: "사진처럼 약 70° 각도로 카메라를 위치시키고, 전신이 나오도록 누워주세요.",
+      desc: "사진처럼 약 75° 각도로 카메라를 위치시키고, 전신이 나오도록 누워주세요.",
       guide: "무릎을 세우고 누워 상체를 말아 올렸다가 내립니다.",
       path: "/measure/situp",
       done: Number(session?.situp?.reps ?? 0) > 0,
@@ -209,8 +209,7 @@ export default function Select() {
             종목 선택
           </h2>
           <p style={{ marginTop: 0, marginBottom: 0, fontSize: 13, color: "#aaa", lineHeight: 1.4 }}>
-            각 항목을 측정하면 카드에 <b>완료</b> 표시와 <b>간단 결과</b>가 나타납니다.
-            세 종목 모두 완료되면 <b>다음</b> 버튼이 활성화됩니다.
+            측정 시 안내 음성이 들릴 수 있도록 <b>기기 음량을 켜주세요.</b>   세 종목 모두 완료되면 <b>다음</b> 버튼이 활성화됩니다.
           </p>
         </div>
 

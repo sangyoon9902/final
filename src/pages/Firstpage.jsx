@@ -18,7 +18,7 @@ export default function Firstpage() {
           marginBottom: 40,
         }}
       >
-        AI Fitness
+        AI 국민체력 100 간편측정
       </h1>
 
       {/* 🔥 시작하기 버튼 */}
@@ -55,7 +55,7 @@ export default function Firstpage() {
       </div>
 
       <p style={{ marginTop: 28, fontSize: 13, color: "#94a3b8" }}>
-        ※ 크롬 브라우저 권장 · 모바일은 일부 기능이 제한될 수 있습니다.
+        ※ 크롬 브라우저 권장 · 모바일은 기능이 제한됩니다.
       </p>
     </div>
   );
