@@ -1,3 +1,19 @@
+<p align="center">
+  <img src="./assets/banner.png" width="800" />
+</p>
+
+<h1 align="center">🏋️‍♂️ AI Fitness Service</h1>
+
+<p align="center">
+AI 기반 비대면 자가체력측정 · 국민체력 100 기반 운동처방 플랫폼
+</p>
+
+<p align="center">
+  <a href="#"><img src="https://img.shields.io/badge/React-Vite-blue" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/FastAPI-Backend-green" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/Supabase-Database-3FCF8E" /></a>
+</p>
+
 
 # 🏋️‍♂️ AI Fitness Service (AI 기반 비대면 운동처방 플랫폼)
 
