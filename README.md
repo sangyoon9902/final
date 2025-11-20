@@ -10,7 +10,8 @@
 * **지원 기기:** Desktop / Laptop (모바일 미지원)
 ---
 ## 🧩 서비스 흐름도 (Service Flow)
-<img width="1952" height="1073" alt="image" src="https://github.com/user-attachments/assets/74808850-7dd9-4f6b-b77a-216ddb5f69a0" />
+<img width="1952" height="1073" alt="image" src="https://github.com/user-attachments/assets/019129a3-fd86-4a88-8343-eab616bb16e9" />
+
 
 ---
 
