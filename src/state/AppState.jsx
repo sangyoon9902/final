@@ -53,7 +53,7 @@ export function AppProvider({ children }) {
     traceId: "",
     planMd: "",
 
-    // 윗몸일으키기
+    // 윗몸 말아올리기
     situp: { reps: 0, maxTorsoDeg: 0 },
 
     // 스텝 테스트

@@ -89,7 +89,7 @@ function SitupFlowRibbon({ phase, countdown }) {
       }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}>
           <span style={{ fontSize:16, fontWeight:800, letterSpacing:0.2, color:"#eaeefb" }}>
-            윗몸일으키기 측정
+            윗몸 말아올리기 측정
           </span>
           <span style={{ fontSize:12, opacity:0.85 }}>{rightText}</span>
         </div>
@@ -150,7 +150,7 @@ function SitupFlowRibbon({ phase, countdown }) {
 /* ───────────────────────── 2. GuideCard UI (우측 상단) ───────────────────────── */
 function GuideCard({ onClose }) {
   return (
-    <aside style={gStyles.wrap} role="complementary" aria-label="윗몸일으키기 준비자세 가이드">
+    <aside style={gStyles.wrap} role="complementary" aria-label="윗몸 말아올리기 준비자세 가이드">
       <div style={gStyles.card}>
         <div style={gStyles.header}>
           <span style={gStyles.pill}>Guide</span>
@@ -165,7 +165,7 @@ function GuideCard({ onClose }) {
         <div style={gStyles.imgWrap}>
           <img
             src="/situp.png"
-            alt="윗몸일으키기 준비자세 예시 (카메라 75°)"
+            alt="윗몸 말아올리기 준비자세 예시 (카메라 75°)"
             style={gStyles.img}
             draggable={false}
           />

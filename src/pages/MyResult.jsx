@@ -252,8 +252,8 @@ export default function MyResult() {
             {/* 측정 결과 패널 */}
             <section style={styles.panel}>
               <div style={styles.panelTitle}>⚙️ 측정 결과</div>
-              <Row name="윗몸일으키기" value={situp} unit="회"        score={scoreSitup} />
-              <Row name="앉아 윗몸앞으로 굽히기"       value={reach} unit="cm"        score={scoreReach} />
+              <Row name="윗몸 말아올리기" value={situp} unit="회"        score={scoreSitup} />
+              <Row name="앉아 윗몸 앞으로 굽히기"       value={reach} unit="cm"        score={scoreReach} />
               <Row name="스텝 회복기"  value={step_bpm} unit="BPM"    score={scoreStep} />
               <Row name="추정 VO₂max"  value={vo2} unit="ml/kg/min"   score={scoreVo2} />
               {detail?.trace_id && (

@@ -152,7 +152,7 @@ export default function Select() {
     },
     {
       id: "reach",
-      title: "앉아윗몸앞으로굽히기(cm)",
+      title: "앉아윗몸앞으로굽히기",
       desc: "측면(90°)에서 카메라를 두고 다리를 펴고 앉아주세요.",
       guide: "손끝을 최대한 멀리 뻗어 유연성을 평가합니다.",
       path: "/measure/reach",
@@ -312,7 +312,7 @@ export default function Select() {
         }}
       >
         <div style={{ fontSize: 14, color: "#ddd" }}>
-          진행: {situpDone ? "●" : "○"} 윗몸말아올리기 · {stepDone ? "●" : "○"} 스텝검사 · {reachDone ? "●" : "○"} 앉아윗몸앞으로굽히기(cm)
+          진행: {situpDone ? "●" : "○"} 윗몸 말아올리기 · {stepDone ? "●" : "○"} 스텝검사 · {reachDone ? "●" : "○"} 앉아 윗몸 앞으로 굽히기
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
