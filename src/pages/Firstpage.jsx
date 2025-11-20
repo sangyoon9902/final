@@ -18,7 +18,7 @@ export default function Firstpage() {
           marginBottom: 40,
         }}
       >
-        AI 국민체력 100 간편측정
+        국민체력 100 간편측정
       </h1>
 
       {/* 🔥 시작하기 버튼 */}

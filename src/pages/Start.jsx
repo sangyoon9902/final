@@ -325,7 +325,7 @@ export default function Start() {
       </form>
 
       <p style={{ marginTop: 18, color: "#ffffffff", fontSize: "0.9rem" }}>
-        AI 피트니스 코칭 기반 국민체력 100 온라인 운동 코칭 서비스
+        AI 피트니스 코칭 서비스 체크핏
       </p>
 
       {/* ✅ 발급 직후에만 모달 표시 */}

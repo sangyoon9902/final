@@ -38,7 +38,7 @@ export default function App() {
         }}
       >
         {/* 상단 서비스 타이틀 */}
-        <strong>🏋️ AI 국민체력</strong>
+        <strong>🏋️ 체크핏</strong>
 
         {/* 상단 네비게이션 */}
         <nav

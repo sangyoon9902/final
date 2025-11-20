@@ -1,6 +1,5 @@
 // src/pages/Survey3.jsx
-
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../state/AppState";
 
@@ -41,9 +40,8 @@ export default function Survey3() {
   const [sitHour, setSitHour] = useState(0);
   const [sitMin, setSitMin] = useState(0);
 
-  // ✅ 주로 운동하는 장소는 "비제어 + ref" 로 관리 (연속 입력 문제 피하기)
-  const placeRef = useRef(null);
-  const [defaultPlace, setDefaultPlace] = useState(""); // 초기값만 저장
+  // ✅ 운동 장소도 Survey2처럼 state로 관리
+  const [place, setPlace] = useState("");
 
   const [touched, setTouched] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -122,9 +120,9 @@ export default function Survey3() {
       setSitMin(sMin % 60);
     }
 
-    // ✅ 운동 장소 초기값만 따로 저장 (비제어 input의 defaultValue로 사용)
+    // ✅ 운동 장소 복원 (제어 컴포넌트)
     if (typeof saved.main_place === "string") {
-      setDefaultPlace(saved.main_place);
+      setPlace(saved.main_place);
     }
 
     setInitialized(true);
@@ -143,7 +141,7 @@ export default function Survey3() {
     // 걷기
     if (!walkNone && (walkDays <= 0 || walkHour + walkMin === 0)) return false;
 
-    // 모두 '안한다'인 경우는 OK, 그 외는 각 항목 검증은 위에서 이미 처리
+    // 모두 '안한다'인 경우는 OK
     return true;
   }, [
     jobType,
@@ -256,8 +254,6 @@ export default function Survey3() {
     setTouched(true);
     if (!isValid) return;
 
-    const placeValue = placeRef.current?.value || "";
-
     const payload = {
       job_type: jobType === "기타" ? jobEtc.trim() : jobType,
       vigorous: {
@@ -276,7 +272,7 @@ export default function Survey3() {
         none: walkNone,
       },
       sitting_min_per_day: sitHour * 60 + sitMin,
-      main_place: placeValue.trim(), // ✅ ref로부터 읽음
+      main_place: place.trim(), // ✅ state에서 읽기
     };
 
     const prev = JSON.parse(localStorage.getItem("survey") || "{}");
@@ -293,7 +289,7 @@ export default function Survey3() {
     navigate("/survey4");
   };
 
-  // 버튼 공통 스타일
+  // 버튼 공통 스타일 (Survey2랑 통일)
   const baseButtonStyle = {
     flex: 1,
     padding: "16px",
@@ -591,14 +587,14 @@ export default function Survey3() {
           }
         />
 
-        {/* 6) 운동 장소 – ✅ 비제어 input + ref */}
+        {/* 6) 운동 장소 – ✅ Survey2 스타일: 제어 input */}
         <Row
           no="6"
           title="주로 운동하는 장소는 어디입니까? (필수 아님)"
           right={
             <input
-              ref={placeRef}
-              defaultValue={defaultPlace}
+              value={place}
+              onChange={(e) => setPlace(e.target.value)}
               placeholder="예: 공원, K-Pop 헬스장, 학교 체육관 등"
               style={{ ...selStyle, width: "100%" }}
             />
@@ -606,7 +602,7 @@ export default function Survey3() {
         />
       </div>
 
-      {/* 하단 버튼 */}
+      {/* 하단 버튼 (Survey2와 동일 스타일) */}
       <div
         style={{
           display: "flex",
