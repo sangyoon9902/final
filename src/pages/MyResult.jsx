@@ -202,6 +202,12 @@ export default function MyResult() {
             {loading ? "검색 중…" : "검색"}
           </button>
         </div>
+
+        {/* ✅ 안내 문구 추가 */}
+        <div style={{ marginTop: 8, fontSize: 12, color: "#64748b" }}>
+          검수완료된 처방만 조회 가능합니다.
+        </div>
+
         {err && <div style={{ ...styles.errorBox, marginTop: 12 }}>{err}</div>}
       </div>
 
