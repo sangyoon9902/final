@@ -79,11 +79,14 @@ function NavBtn({ to, children, activeOverride = false }) {
     loc.pathname === to || (to !== "/" && loc.pathname.startsWith(to));
   const active = activeOverride || computedActive;
 
+  const disabled = true; // 🔥 네비게이션 클릭 비활성화
+
   return (
     <Link
-      to={to}
+      to={disabled ? "#" : to}
       aria-current={active ? "page" : undefined}
       style={{
+        pointerEvents: disabled ? "none" : "auto", // 🔥 클릭 차단
         background: active ? "#3b82f6" : "#1a1a2a",
         border: active ? "1px solid #60a5fa" : "1px solid #444",
         borderRadius: "8px",
@@ -95,9 +98,12 @@ function NavBtn({ to, children, activeOverride = false }) {
         lineHeight: 1.3,
         boxShadow: active ? "0 0 6px #2563ebaa" : "none",
         transition: "all 0.2s ease",
+        opacity: disabled ? 0.55 : 1, // 시각적으로 비활성 느낌
+        cursor: disabled ? "not-allowed" : "pointer",
       }}
     >
       {children}
     </Link>
   );
 }
+

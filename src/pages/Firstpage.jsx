@@ -4,58 +4,71 @@ export default function Firstpage() {
   return (
     <div
       style={{
-        maxWidth: 960,
+        maxWidth: 1100,        // ⬆ 크기 확장
         margin: "0 auto",
-        padding: "120px 20px",
+        padding: "70px 20px",  // ⬆ 여백 확대
         textAlign: "center",
         color: "#fff",
       }}
     >
-      <h1
+      {/* ====== 타이틀 영역 ====== */}
+      <img
+        src="/title.png"
+        alt="서비스 타이틀"
         style={{
-          fontSize: 34,
-          fontWeight: 900,
-          marginBottom: 40,
+          width: "100%",
+          maxWidth: 600,       // ⬆ 타이틀 확대
+          margin: "0 auto 20px",
+          marginTop: "-20px",
+          display: "block",
         }}
-      >
-        국민체력 100 간편측정
-      </h1>
+      />
 
-      {/* 🔥 시작하기 버튼 */}
+      {/* ====== 시작하기 버튼 ====== */}
       <Link
         to="/start"
         style={{
           display: "inline-block",
-          padding: "16px 36px",
+          padding: "18px 80px",  // ⬆ 버튼 크기 확대
           background: "#3b82f6",
-          borderRadius: 12,
+          borderRadius: 25,
           color: "#fff",
-          fontSize: 20,
-          fontWeight: 800,
+          fontSize: 40,          // ⬆ 폰트 크게
+          fontWeight: 900,
           textDecoration: "none",
-          border: "1px solid #60a5fa",
-          boxShadow: "0 0 18px #1e40af66",
-          transition: "all 0.2s ease",
+          border: "2px solid #60a5fa",
+          boxShadow: "0 0 20px #1e40af70",
+          transition: "all .2s ease",
+          marginTop: "0px", 
+          marginBottom: "-100px",
         }}
       >
         시작하기
       </Link>
 
-      {/* 🔥 이미지 삽입 부분 */}
-      <div style={{ marginTop: 40 }}>
-        <img
-          src="/start-characters.png"
-          alt="운동 캐릭터들"
-          style={{
-            width: "100%",
-            maxWidth: 600,
-            borderRadius: 16,
-          }}
-        />
-      </div>
+      {/* ====== 캐릭터 이미지 영역 ====== */}
+      <img
+        src="/characters.png"
+        alt="캐릭터 이미지"
+        style={{
+          width: "100%",
+          maxWidth: 820,   
+          marginTop: "-100px", 
+          marginBottom: "0px",   // ⬆ 캐릭터 이미지 확대
+          margin: "20px auto 0",
+          display: "block",
+        }}
+      />
 
-      <p style={{ marginTop: 28, fontSize: 13, color: "#94a3b8" }}>
-        ※ 크롬 브라우저 권장 · 모바일은 기능이 제한됩니다.
+      {/* 안내문 */}
+      <p
+        style={{
+          marginTop: 0,
+          fontSize: 20,        // ⬆ 텍스트 가독성 증가
+          color: "#cbd5e1",
+        }}
+      >
+        ※ 크롬 브라우저 권장 · 모바일 환경에서는 기능이 제한될 수 있습니다.
       </p>
     </div>
   );
