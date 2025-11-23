@@ -2,80 +2,106 @@ import { Link } from "react-router-dom";
 
 export default function Firstpage() {
   return (
-    <div
-      style={{
-        maxWidth: 1100,
-        margin: "0 auto",
-        padding: "70px 20px",
-        textAlign: "center",
-        color: "#fff",
-      }}
-    >
-      {/* ====== 타이틀 영역 ====== */}
-      <img
-        src="/title.png"
-        alt="서비스 타이틀"
-        style={{
-          width: "100%",
-          maxWidth: 650,
-          margin: "0 auto 20px", // 중앙 정렬 + 아래 여백
-          marginTop: "-20px",
-          display: "block",
-        }}
-      />
+    <div className="fixed-container">
+      <style>{`
+        /* ✅ 1. 페이지 전체 초기화 */
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 100%;
+          height: 100%;
+          background-color: #060b24;
+          overflow: hidden;
+        }
 
-      {/* ====== 시작하기 버튼 ====== */}
-      <Link
-        to="/start"
-        style={{
-          display: "inline-block",
-          padding: "15px 60px",
-          background: "#3b82f6",
-          borderRadius: 25,
-          color: "#fff",
-          fontSize: 30,
-          fontWeight: 900,
-          textDecoration: "none",
-          border: "2px solid #60a5fa",
-          boxShadow: "0 0 20px #1e40af70",
-          transition: "all .2s ease",
+        /* ✅ 2. 메인 컨테이너 (여기를 수정했습니다) */
+        .fixed-container {
+          width: 100vw;
+          height: 100vh;
           
-          // ▼ 수정: 위치 조정 및 클릭 보장
-          position: "relative", // z-index를 쓰기 위해 필수
-          zIndex: 10,           // 캐릭터 이미지보다 위에 오게 설정
-          marginBottom: "-100px", // 캐릭터와 겹치게 하기 위해 유지
-        }}
-      >
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          
+          /* ▼▼▼ 기존 center를 지우고 아래 두 줄로 변경 ▼▼▼ */
+          justify-content: flex-start; /* 1. 무조건 위에서부터 시작 */
+          padding-top: 7vh;           /* 2. 위에서 13%만큼 내려서 위치 잡음 */
+          
+          background-color: #060b24;
+        }
+
+        /* ✅ 3. 타이틀 이미지 */
+        .title-img {
+          width: auto;
+          height: auto;
+          max-width: 80%;
+          max-height: 25vh;
+          
+          object-fit: contain;
+          margin-bottom: -3vh;
+        }
+
+        /* ✅ 4. 시작하기 버튼 */
+        .start-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          
+          padding: 1.5vh 3vw; 
+          font-size: clamp(16px, 3vh, 32px);
+          
+          background: #3b82f6;
+          border-radius: 50px;
+          color: #fff;
+          font-weight: 900;
+          text-decoration: none;
+          border: 2px solid #60a5fa;
+          box-shadow: 0 0 20px #1e40af70;
+          transition: all .2s ease;
+          
+          position: relative;
+          z-index: 100;
+          
+          /* 사용자 설정 유지 */
+          margin-top: 6vh;      
+          margin-bottom: -12vh; 
+        }
+
+        /* ✅ 5. 캐릭터 이미지 */
+        .char-img {
+          width: auto;
+          height: auto;
+          max-width: 90%;
+          max-height: 55vh;
+          
+          object-fit: contain;
+          margin-top: 0; 
+          pointer-events: none;
+        }
+
+        /* ✅ 6. 하단 안내문 */
+        .info-text {
+          position: absolute;
+          bottom: 4vh;
+          
+          margin: 0;
+          font-size: clamp(11px, 1.5vh, 16px);
+          color: #cbd5e1;
+          opacity: 0.6;
+          z-index: 11;
+        }
+      `}</style>
+
+      {/* 컨텐츠 영역 */}
+      <img src="/title.png" alt="타이틀" className="title-img" />
+      
+      <Link to="/start" className="start-btn">
         시작하기
       </Link>
-
-      {/* ====== 캐릭터 이미지 영역 ====== */}
-      <img
-        src="/characters.png"
-        alt="캐릭터 이미지"
-        style={{
-          width: "100%",
-          maxWidth: 950,
-          display: "block",
-          
-          // ▼ 수정: 마진 설정 정리 (덮어쓰기 방지)
-          marginTop: "-140px", 
-          marginBottom: "0px",
-          marginLeft: "auto",  // 중앙 정렬
-          marginRight: "auto", // 중앙 정렬
-        }}
-      />
-
-      {/* 안내문 */}
-      <p
-        style={{
-          marginTop: 0,
-          fontSize: 25,
-          color: "#cbd5e1",
-          position: "relative", // 혹시 모를 겹침 방지
-          zIndex: 11,
-        }}
-      >
+      
+      <img src="/characters.png" alt="캐릭터" className="char-img" />
+      
+      <p className="info-text">
         ※ 크롬 브라우저 권장 · 모바일 환경에서는 기능이 제한될 수 있습니다.
       </p>
     </div>

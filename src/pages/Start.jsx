@@ -1,4 +1,3 @@
-// src/pages/Start.jsx
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../state/AppState";
@@ -8,6 +7,7 @@ import flatpickr from "flatpickr";
 import { Korean } from "flatpickr/dist/l10n/ko.js";
 import "flatpickr/dist/flatpickr.min.css";
 
+/* ... (calcAgeFromDobISO 함수는 기존과 동일) ... */
 function calcAgeFromDobISO(dobISO, now = new Date()) {
   if (!dobISO) return null;
   const [y, m, d] = dobISO.split("-").map(Number);
@@ -74,7 +74,7 @@ function DobPicker({ value, onChange, disabled, badgeText }) {
   );
 }
 
-/* ───── ID 모달 ───── */
+/* ───── ID 모달 (기존 동일) ───── */
 function IdModal({ open, id, onConfirm }) {
   if (!open) return null;
   return (
@@ -118,7 +118,6 @@ export default function Start() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  // 제출 후 모달에 보여줄 id만 관리 (초기 표시 X)
   const [visibleId, setVisibleId] = useState("");
   const [showIdModal, setShowIdModal] = useState(false);
 
@@ -143,9 +142,7 @@ export default function Start() {
 
     try {
       setLoading(true);
-      // 서버에서 새 id 발급
       const { id } = await createUser({ name: name.trim() });
-
       const profile = {
         name: name.trim(),
         sex,
@@ -155,14 +152,8 @@ export default function Start() {
         weight: Number(weight),
         id,
       };
-
       setProfile(profile);
-      localStorage.setItem(
-        "ai_fitness_user",
-        JSON.stringify({ name: profile.name, id })
-      );
-
-      // ✅ 제출 후에만 모달로 노출
+      localStorage.setItem("ai_fitness_user", JSON.stringify({ name: profile.name, id }));
       setVisibleId(id);
       setShowIdModal(true);
     } catch (e) {
@@ -174,275 +165,196 @@ export default function Start() {
   }
 
   return (
-    <div className="page">
-      {/* 로컬 스타일 */}
+    <div className="page-container">
       <style>{`
         *, *::before, *::after { box-sizing: border-box; }
-        .grid > * { min-width: 0; }
-        .grid > label { display:block; }
 
-        :root{
-          --radius:16px; --inpH:56px; --font:16px; --label:13px;
-          --stroke:#c8d6f0; --stroke2:#99b6f0; --text:#0f1b2d; --muted:#667085;
-          /* 🔵 버튼 색을 Firstpage와 통일 */
-          --brand:#3b82f6;
-          --brand-hover:#2563eb;
-          --chip-bg:rgba(13,110,253,.08); --chip-stroke:rgba(13,110,253,.18); --chip-fg:#0b5cab;
-          --gap-col:15px; --gap-row:10px;
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 100%;
+          height: 100%;
+          background-color: #060b24; 
+          overflow: hidden;         
         }
 
-        .page{
-          min-height:100vh;
-          display:flex;
-          flex-direction:column;
-          align-items:center;
-          /* 🔵 Firstpage와 동일한 네이비 배경 */
-          background:#060b24ff;
-          padding:32px 16px;
-          text-align:center;
+        .page-container {
+          width: 100vw;
+          height: 100vh;
+          
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          
+          background-color: #060b24;
+          overflow: hidden; 
         }
 
-        .title{
-          font-size:2.6rem;
-          font-weight:900;
-          color:#ffffff;
-          margin:0 0 14px;
+        :root {
+          --radius: 14px;
+          --inpH: 48px;
+          --font: 16px;
+          --label: 13px;
+          --stroke: #c8d6f0;
+          --stroke2: #99b6f0;
+          --text: #0f1b2d;
+          --muted: #667085;
+          --brand: #3b82f6;
+          --brand-hover: #2563eb;
+          --chip-bg: rgba(13,110,253,.08); --chip-stroke: rgba(13,110,253,.18); --chip-fg: #0b5cab;
+          --gap-col: 16px;
+          --gap-row: 10px;
         }
 
-        .card{
-          width:100%;
-          max-width:760px;
-          background:#fff;
-          border-radius:28px;
-          box-shadow:0 18px 52px rgba(0,0,0,.10);
-          padding:36px;
-          text-align:left;
+        /* 타이틀: 위치 위로 조정 */
+        .page-title {
+          font-size: clamp(20px, 3.5vh, 32px);
+          font-weight: 900;
+          color: #ffffff;
+          margin: 0 0 -8vh 0;           /* 아래 여백 조금 더 확보 */
+          transform: translateY(-3vh); /* 전체적으로 위로 끌어올림 */
         }
 
-        .grid{
-          display:grid;
-          grid-template-columns:repeat(2, minmax(0,1fr));
-          column-gap:var(--gap-col);
-          row-gap:var(--gap-row);
-        }
-        @media (max-width: 768px){
-          .grid{ grid-template-columns:1fr; column-gap:0 }
-        }
-
-        .label{
-          font-size:var(--label);
-          margin:0 0 10px;
-          color:#334e68;
-          font-weight:700;
+        /* 캐릭터 이미지: 크기 확대 */
+        .char-img {
+          width: 100%;
+          height: auto;
+          max-width: 550px;    /* 기존 300px -> 550px */
+          max-height: 26vh;    /* 기존 14vh -> 26vh (약 2배) */
+          margin-bottom: 0vh;
+          object-fit: contain;
         }
 
-        .input, .select, .ctrl{
-          width:100%; height:var(--inpH); font-size:var(--font); color:var(--text);
-          border:1px solid var(--stroke); border-radius:var(--radius);
-          background:#fff; outline:none; padding:0 16px;
-          transition:border-color .15s, box-shadow .15s, background .15s;
+        /* 입력 폼 카드: 이미지 커진 만큼 높이 조절 */
+        .form-card {
+          width: 90%;
+          max-width: 700px;
+          max-height: 55vh;    /* 70vh -> 55vh 로 줄여서 하단 잘림 방지 */
+          
+          background: #fff;
+          border-radius: 24px;
+          box-shadow: 0 18px 52px rgba(0,0,0,.10);
+          padding: 3vh 3vw;
+          
+          overflow-y: auto;    
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .form-card::-webkit-scrollbar { display: none; }
+
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0,1fr));
+          column-gap: var(--gap-col);
+          row-gap: var(--gap-row);
+        }
+        @media (max-width: 600px) {
+          .grid { grid-template-columns: 1fr; }
         }
 
-        .input:focus, .select:focus, .ctrl:focus-within{
-          border-color:var(--stroke2);
-          box-shadow:0 0 0 4px rgba(68,132,255,.15);
+        .label {
+          display: block;
+          font-size: var(--label);
+          margin: 0 0 6px;
+          color: #334e68;
+          font-weight: 700;
         }
 
-        .select{
-          appearance:none;
+        .input, .select, .ctrl {
+          width: 100%;
+          height: var(--inpH);
+          font-size: var(--font);
+          color: var(--text);
+          border: 1px solid var(--stroke);
+          border-radius: var(--radius);
+          background: #fff;
+          outline: none;
+          padding: 0 16px;
+          transition: all .15s;
+        }
+        .input:focus, .select:focus, .ctrl:focus-within {
+          border-color: var(--stroke2);
+          box-shadow: 0 0 0 4px rgba(68,132,255,.15);
+        }
+
+        .select {
+          appearance: none;
           background-image:
             linear-gradient(45deg, transparent 50%, #666 50%),
             linear-gradient(135deg, #666 50%, transparent 50%);
-          background-position:
-            calc(100% - 18px) calc(1.05em),
-            calc(100% - 13px) calc(1.05em);
-          background-size:5px 5px, 5px 5px;
-          background-repeat:no-repeat;
-          padding-right:40px;
+          background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+          background-size: 5px 5px;
+          background-repeat: no-repeat;
+          padding-right: 40px;
         }
 
-        .ctrl{
-          position:relative;
-          overflow:hidden;
-          display:flex;
-          align-items:center;
-        }
-        .ctrl--dob{ padding-right:110px; }
+        .ctrl { position: relative; display: flex; align-items: center; overflow: hidden; }
+        .ctrl--dob { padding-right: 110px; }
+        .input--ghost { flex: 1; height: 100%; border: none; background: transparent; padding: 0; }
+        .flatpickr-input { width: 100% !important; border: none !important; box-shadow: none !important; background: transparent !important; }
 
-        .input--ghost{
-          flex:1;
-          height:100%;
-          border:none;
-          background:transparent;
-          padding:0;
+        .iconBtn {
+          width: 36px; height: 36px; border-radius: 10px; border: none; background: transparent;
+          cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
         }
+        .iconBtn--dob { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
 
-        .flatpickr-input{
-          width:100% !important;
-          border:none !important;
-          box-shadow:none !important;
-          background:transparent !important;
+        .badge {
+          font-weight: 800; color: var(--chip-fg); background: var(--chip-bg);
+          border: 1px solid var(--chip-stroke); padding: 6px 10px; border-radius: 999px;
+          white-space: nowrap; font-size: 12px;
         }
+        .badge--dob { position: absolute; right: 54px; top: 50%; transform: translateY(-50%); }
 
-        .iconBtn{
-          width:36px;
-          height:36px;
-          border-radius:10px;
-          border:none;
-          background:transparent;
-          cursor:pointer;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-        }
-        .iconBtn--dob{
-          position:absolute;
-          right:12px;
-          top:50%;
-          transform:translateY(-50%);
-        }
+        .spacer { grid-column: 1 / -1; height: 10px; }
 
-        .badge{
-          font-weight:800;
-          color:var(--chip-fg);
-          background:var(--chip-bg);
-          border:1px solid var(--chip-stroke);
-          padding:6px 10px;
-          border-radius:999px;
-          white-space:nowrap;
-          font-size:12px;
+        .submit-btn {
+          width: 100%;
+          margin-top: 20px;
+          height: 48px;
+          border-radius: 16px;
+          border: none;
+          cursor: pointer;
+          background: var(--brand);
+          color: #fff;
+          font-weight: 900;
+          font-size: 1rem;
+          box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+          transition: background .12s ease;
         }
-        .badge--dob{
-          position:absolute;
-          right:54px;
-          top:50%;
-          transform:translateY(-50%);
-        }
+        .submit-btn:hover { background: var(--brand-hover); }
+        .submit-btn:disabled { opacity: .7; cursor: not-allowed; }
 
-        .spacer{ grid-column:1 / -1; height:28px; }
+        .hint { margin-top: 10px; color: var(--muted); font-size: 12px; }
+        .error { margin-bottom: 12px; padding: 10px 14px; border-radius: 12px; border: 1px solid #f2b8b5; background: #fdeceb; color: #b42318; font-size: 13px; }
 
-        .btn{
-          width:100%;
-          margin-top:24px;
-          height:56px;
-          border-radius:20px;
-          border:none;
-          cursor:pointer;
-          background:var(--brand);
-          color:#fff;
-          font-weight:900;
-          font-size:1.05rem;
-          box-shadow:0 12px 28px rgba(0,0,0,.15);
-          transition:background .12s ease;
-        }
-        .btn:hover{ background:var(--brand-hover); }
-        .btn:disabled{ opacity:.7; cursor:not-allowed; }
+        .footer-text { margin-top: 2vh; color: #ffffff; opacity: 0.6; font-size: 0.85rem; }
 
-        .hint{
-          margin-top:12px;
-          color:var(--muted);
-          font-size:12px;
-        }
-
-        .error{
-          margin-bottom:16px;
-          padding:12px 14px;
-          border-radius:12px;
-          border:1px solid #f2b8b5;
-          background:#fdeceb;
-          color:#b42318;
-          font-size:13px;
-        }
-
-        /* ── 모달 ── */
-        .modalBackdrop{
-          position:fixed;
-          inset:0;
-          background:rgba(0,0,0,.45);
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          padding:20px;
-          z-index:1000;
-        }
-
-        .modalCard{
-          width:min(640px, 94vw);
-          background:#fff;
-          border-radius:20px;
-          padding:22px 22px 18px;
-          box-shadow:0 24px 80px rgba(0,0,0,.25);
-        }
-
-        .modalTitle{
-          margin:0 0 6px;
-          font-size:20px;
-          font-weight:900;
-          color:#0b1a33;
-        }
-
-        .modalDesc{
-          margin:0 0 12px;
-          color:#334e68;
-          font-size:14px;
-        }
-
-        .modalUidRow{
-          display:flex;
-          align-items:center;
-          gap:10px;
-          margin:12px 0 18px;
-        }
-
-        .modalUid{
-          flex:1;
-          font-family: ui-monospace, Menlo, monospace;
-          font-size:14px;
-          background:#f4f7ff;
-          padding:10px 12px;
-          border-radius:12px;
-          color:#0b5cab;
-          border:1px solid #d9e3ff;
-        }
-
-        .modalCopy{
-          border:none;
-          border-radius:12px;
-          padding:10px 14px;
-          cursor:pointer;
-          background:#e7eeff;
-          color:#0b5cab;
-          font-weight:900;
-        }
-        .modalCopy:hover{ filter:brightness(.96); }
-
-        .modalOk{
-          width:100%;
-          height:48px;
-          border:none;
-          border-radius:14px;
-          cursor:pointer;
-          background:#3b82f6;
-          color:#fff;
-          font-weight:900;
-        }
-        .modalOk:hover{ background:#2563eb; }
+        .modalBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 1000; }
+        .modalCard { width: min(640px, 94vw); background: #fff; border-radius: 20px; padding: 22px 22px 18px; box-shadow: 0 24px 80px rgba(0,0,0,.25); }
+        .modalTitle { margin: 0 0 6px; font-size: 20px; font-weight: 900; color: #0b1a33; }
+        .modalDesc { margin: 0 0 12px; color: #334e68; font-size: 14px; }
+        .modalUidRow { display: flex; align-items: center; gap: 10px; margin: 12px 0 18px; }
+        .modalUid { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 14px; background: #f4f7ff; padding: 10px 12px; border-radius: 12px; color: #0b5cab; border: 1px solid #d9e3ff; }
+        .modalCopy { border: none; border-radius: 12px; padding: 10px 14px; cursor: pointer; background: #e7eeff; color: #0b5cab; font-weight: 900; }
+        .modalOk { width: 100%; height: 48px; border: none; border-radius: 14px; cursor: pointer; background: #3b82f6; color: #fff; font-weight: 900; }
       `}</style>
 
-      <h1 className="title">체크핏 (CHECK-FIT) 서비스</h1>
+      <h1 className="page-title">체크핏 (CHECK-FIT) 서비스</h1>
 
       <img
         src="/characters.png"
         alt="캐릭터"
-        style={{ width: 500, height: "auto",marginTop: "-60px", marginBottom: 2}}
+        className="char-img"
       />
 
-      <form className="card" onSubmit={handleStart}>
+      <form className="form-card" onSubmit={handleStart}>
         {err && <div className="error">{err}</div>}
 
         <div className="grid">
           <label style={{ gridColumn: "1 / -1" }}>
-            <div className="label">이름</div>
+            <span className="label">이름</span>
             <input
               className="input"
               type="text"
@@ -454,7 +366,7 @@ export default function Start() {
           </label>
 
           <label>
-            <div className="label">성별</div>
+            <span className="label">성별</span>
             <select
               className="select"
               value={form.sex}
@@ -467,7 +379,7 @@ export default function Start() {
           </label>
 
           <label>
-            <div className="label">생년월일</div>
+            <span className="label">생년월일</span>
             <DobPicker
               value={form.dob}
               disabled={loading}
@@ -479,7 +391,7 @@ export default function Start() {
           <div className="spacer" />
 
           <label>
-            <div className="label">키 (cm)</div>
+            <span className="label">키 (cm)</span>
             <input
               className="input"
               type="number"
@@ -491,7 +403,7 @@ export default function Start() {
           </label>
 
           <label>
-            <div className="label">몸무게 (kg)</div>
+            <span className="label">몸무게 (kg)</span>
             <input
               className="input"
               type="number"
@@ -503,7 +415,7 @@ export default function Start() {
           </label>
         </div>
 
-        <button className="btn" type="submit" disabled={loading}>
+        <button className="submit-btn" type="submit" disabled={loading}>
           {loading ? "저장 중…" : "다음 단계로 이동"}
         </button>
 
@@ -512,11 +424,10 @@ export default function Start() {
         </p>
       </form>
 
-      <p style={{ marginTop: 18, color: "#ffffffff", fontSize: "0.9rem" }}>
+      <p className="footer-text">
         AI 피트니스 코칭 서비스 체크핏
       </p>
 
-      {/* ✅ 발급 직후에만 모달 표시 */}
       <IdModal
         open={showIdModal}
         id={visibleId}
