@@ -4,9 +4,9 @@ export default function Firstpage() {
   return (
     <div
       style={{
-        maxWidth: 1100,        // ⬆ 크기 확장
+        maxWidth: 1100,
         margin: "0 auto",
-        padding: "70px 20px",  // ⬆ 여백 확대
+        padding: "70px 20px",
         textAlign: "center",
         color: "#fff",
       }}
@@ -17,8 +17,8 @@ export default function Firstpage() {
         alt="서비스 타이틀"
         style={{
           width: "100%",
-          maxWidth: 600,       // ⬆ 타이틀 확대
-          margin: "0 auto 20px",
+          maxWidth: 650,
+          margin: "0 auto 20px", // 중앙 정렬 + 아래 여백
           marginTop: "-20px",
           display: "block",
         }}
@@ -29,18 +29,21 @@ export default function Firstpage() {
         to="/start"
         style={{
           display: "inline-block",
-          padding: "18px 80px",  // ⬆ 버튼 크기 확대
+          padding: "15px 60px",
           background: "#3b82f6",
           borderRadius: 25,
           color: "#fff",
-          fontSize: 40,          // ⬆ 폰트 크게
+          fontSize: 30,
           fontWeight: 900,
           textDecoration: "none",
           border: "2px solid #60a5fa",
           boxShadow: "0 0 20px #1e40af70",
           transition: "all .2s ease",
-          marginTop: "0px", 
-          marginBottom: "-100px",
+          
+          // ▼ 수정: 위치 조정 및 클릭 보장
+          position: "relative", // z-index를 쓰기 위해 필수
+          zIndex: 10,           // 캐릭터 이미지보다 위에 오게 설정
+          marginBottom: "-100px", // 캐릭터와 겹치게 하기 위해 유지
         }}
       >
         시작하기
@@ -52,11 +55,14 @@ export default function Firstpage() {
         alt="캐릭터 이미지"
         style={{
           width: "100%",
-          maxWidth: 820,   
-          marginTop: "-100px", 
-          marginBottom: "0px",   // ⬆ 캐릭터 이미지 확대
-          margin: "20px auto 0",
+          maxWidth: 950,
           display: "block",
+          
+          // ▼ 수정: 마진 설정 정리 (덮어쓰기 방지)
+          marginTop: "-140px", 
+          marginBottom: "0px",
+          marginLeft: "auto",  // 중앙 정렬
+          marginRight: "auto", // 중앙 정렬
         }}
       />
 
@@ -64,8 +70,10 @@ export default function Firstpage() {
       <p
         style={{
           marginTop: 0,
-          fontSize: 20,        // ⬆ 텍스트 가독성 증가
+          fontSize: 25,
           color: "#cbd5e1",
+          position: "relative", // 혹시 모를 겹침 방지
+          zIndex: 11,
         }}
       >
         ※ 크롬 브라우저 권장 · 모바일 환경에서는 기능이 제한될 수 있습니다.

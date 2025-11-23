@@ -3,21 +3,95 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../state/AppState";
 
-/**
- * Survey3 – 국제신체활동설문지(IPAQ) 요약형 (3/4)
- * 저장:
- * 1) localStorage("survey").survey3 로 저장
- * 2) AppProvider.surveys.survey3 로 저장
- *
- * 이동: 이전 → /survey2, 다음 → /survey4
- */
+// ✅ 1. 컴포넌트 외부로 상수 및 스타일 이동 (리렌더링 시 재생성 방지)
+const dayOptions = Array.from({ length: 8 }, (_, i) => i);
+const hourOptions = Array.from({ length: 25 }, (_, i) => i);
+const minOptions = Array.from({ length: 12 }, (_, i) => i * 5);
+
+const selStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  padding: "8px 10px",
+  minWidth: 80,
+};
+
+const wrap = { maxWidth: 980, margin: "40px auto", padding: "0 16px" };
+const card = {
+  border: "1px solid #c9d4ff",
+  borderRadius: 16,
+  overflow: "hidden",
+  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+};
+const header = { background: "#f7f8fb", padding: "14px 18px", fontWeight: 800 };
+
+// ✅ 2. 하위 컴포넌트들을 Survey3 바깥으로 이동
+
+const Error = ({ show, children }) =>
+  show ? (
+    <div
+      style={{
+        color: "#d33",
+        fontSize: 13,
+        marginTop: 6,
+        padding: "0 18px",
+      }}
+    >
+      {children}
+    </div>
+  ) : null;
+
+const TimePicker = ({ hour, setHour, min, setMin, disabled }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <select
+      value={hour}
+      onChange={(e) => setHour(Number(e.target.value))}
+      disabled={disabled}
+      style={selStyle}
+    >
+      {hourOptions.map((h) => (
+        <option key={h} value={h}>
+          {h}
+        </option>
+      ))}
+    </select>
+    <span>시간</span>
+    <select
+      value={min}
+      onChange={(e) => setMin(Number(e.target.value))}
+      disabled={disabled}
+      style={selStyle}
+    >
+      {minOptions.map((m) => (
+        <option key={m} value={m}>
+          {m.toString().padStart(2, "0")}
+        </option>
+      ))}
+    </select>
+    <span>분</span>
+  </div>
+);
+
+const Row = ({ no, title, right }) => (
+  <div style={{ padding: "16px 18px", borderTop: "1px solid #e6e9f3" }}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "60px 1fr 1fr",
+        gap: 16,
+        alignItems: "center",
+      }}
+    >
+      <div style={{ fontWeight: 700 }}>{no}</div>
+      <div>{title}</div>
+      <div>{right}</div>
+    </div>
+  </div>
+);
+
+// ✅ 3. 메인 컴포넌트
 export default function Survey3() {
   const navigate = useNavigate();
   const { surveys, setSurveys } = useApp();
-
-  const dayOptions = useMemo(() => Array.from({ length: 8 }, (_, i) => i), []);
-  const hourOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => i), []);
-  const minOptions = useMemo(() => Array.from({ length: 12 }, (_, i) => i * 5), []);
 
   const [jobType, setJobType] = useState("");
   const [jobEtc, setJobEtc] = useState("");
@@ -40,29 +114,12 @@ export default function Survey3() {
   const [sitHour, setSitHour] = useState(0);
   const [sitMin, setSitMin] = useState(0);
 
-  // ✅ 운동 장소도 Survey2처럼 state로 관리
   const [place, setPlace] = useState("");
 
   const [touched, setTouched] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
-  // 공통 스타일
-  const wrap = { maxWidth: 980, margin: "40px auto", padding: "0 16px" };
-  const card = {
-    border: "1px solid #c9d4ff",
-    borderRadius: 16,
-    overflow: "hidden",
-    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-  };
-  const header = { background: "#f7f8fb", padding: "14px 18px", fontWeight: 800 };
-  const selStyle = {
-    border: "1px solid #cbd5e1",
-    borderRadius: 8,
-    padding: "8px 10px",
-    minWidth: 80,
-  };
-
-  // ✅ 기존 응답 복원 (처음 들어올 때 한 번만)
+  // ✅ 기존 응답 복원
   useEffect(() => {
     if (initialized) return;
 
@@ -120,7 +177,7 @@ export default function Survey3() {
       setSitMin(sMin % 60);
     }
 
-    // ✅ 운동 장소 복원 (제어 컴포넌트)
+    // 장소
     if (typeof saved.main_place === "string") {
       setPlace(saved.main_place);
     }
@@ -130,18 +187,11 @@ export default function Survey3() {
 
   // 유효성 검사
   const isValid = useMemo(() => {
-    // 직업
     if (!jobType) return false;
     if (jobType === "기타" && !jobEtc.trim()) return false;
-
-    // 고강도
     if (!vigNone && (vigDays <= 0 || vigHour + vigMin === 0)) return false;
-    // 중강도
     if (!modNone && (modDays <= 0 || modHour + modMin === 0)) return false;
-    // 걷기
     if (!walkNone && (walkDays <= 0 || walkHour + walkMin === 0)) return false;
-
-    // 모두 '안한다'인 경우는 OK
     return true;
   }, [
     jobType,
@@ -160,7 +210,6 @@ export default function Survey3() {
     walkMin,
   ]);
 
-  // "안한다" 체크 시 값 리셋
   const handleNoneToggle = (which, checked) => {
     if (which === "vig") {
       setVigNone(checked);
@@ -186,70 +235,6 @@ export default function Survey3() {
     }
   };
 
-  // 공용 컴포넌트들
-  const Error = ({ show, children }) =>
-    show ? (
-      <div
-        style={{
-          color: "#d33",
-          fontSize: 13,
-          marginTop: 6,
-          padding: "0 18px",
-        }}
-      >
-        {children}
-      </div>
-    ) : null;
-
-  const TimePicker = ({ hour, setHour, min, setMin, disabled }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <select
-        value={hour}
-        onChange={(e) => setHour(Number(e.target.value))}
-        disabled={disabled}
-        style={selStyle}
-      >
-        {hourOptions.map((h) => (
-          <option key={h} value={h}>
-            {h}
-          </option>
-        ))}
-      </select>
-      <span>시간</span>
-      <select
-        value={min}
-        onChange={(e) => setMin(Number(e.target.value))}
-        disabled={disabled}
-        style={selStyle}
-      >
-        {minOptions.map((m) => (
-          <option key={m} value={m}>
-            {m.toString().padStart(2, "0")}
-          </option>
-        ))}
-      </select>
-      <span>분</span>
-    </div>
-  );
-
-  const Row = ({ no, title, right }) => (
-    <div style={{ padding: "16px 18px", borderTop: "1px solid #e6e9f3" }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "60px 1fr 1fr",
-          gap: 16,
-          alignItems: "center",
-        }}
-      >
-        <div style={{ fontWeight: 700 }}>{no}</div>
-        <div>{title}</div>
-        <div>{right}</div>
-      </div>
-    </div>
-  );
-
-  // 다음 버튼 핸들러
   const handleNext = () => {
     setTouched(true);
     if (!isValid) return;
@@ -272,7 +257,7 @@ export default function Survey3() {
         none: walkNone,
       },
       sitting_min_per_day: sitHour * 60 + sitMin,
-      main_place: place.trim(), // ✅ state에서 읽기
+      main_place: place.trim(),
     };
 
     const prev = JSON.parse(localStorage.getItem("survey") || "{}");
@@ -289,7 +274,6 @@ export default function Survey3() {
     navigate("/survey4");
   };
 
-  // 버튼 공통 스타일 (Survey2랑 통일)
   const baseButtonStyle = {
     flex: 1,
     padding: "16px",
@@ -587,12 +571,15 @@ export default function Survey3() {
           }
         />
 
-        {/* 6) 운동 장소 – ✅ Survey2 스타일: 제어 input */}
+        {/* 6) 운동 장소 */}
         <Row
           no="6"
           title="주로 운동하는 장소는 어디입니까? (필수 아님)"
           right={
             <input
+              type="text"
+              name="main_place"
+              autoComplete="off"
               value={place}
               onChange={(e) => setPlace(e.target.value)}
               placeholder="예: 공원, K-Pop 헬스장, 학교 체육관 등"
@@ -602,7 +589,7 @@ export default function Survey3() {
         />
       </div>
 
-      {/* 하단 버튼 (Survey2와 동일 스타일) */}
+      {/* 하단 버튼 */}
       <div
         style={{
           display: "flex",

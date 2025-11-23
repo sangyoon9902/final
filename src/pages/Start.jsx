@@ -434,7 +434,7 @@ export default function Start() {
       <img
         src="/characters.png"
         alt="캐릭터"
-        style={{ width: 500, height: "auto", marginBottom: 2}}
+        style={{ width: 500, height: "auto",marginTop: "-60px", marginBottom: 2}}
       />
 
       <form className="card" onSubmit={handleStart}>
