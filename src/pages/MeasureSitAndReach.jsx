@@ -196,8 +196,9 @@ function GuideCard({ onClose }) {
         </div>
 
         <div style={gStyles.title}>
-          <b style={{ color:"#7cc7ff" }}>전신이 화면에 모두</b> 나오게 배치해주세요.<br/>
-          <b style={{ color:"#7cc7ff" }}>1초 유지시</b>  자동 기록됩니다.
+          사진처럼 <b style={{ color:"#7cc7ff" }}> 전신의 측면이 화면에 모두</b> 나오게하고, 
+          <br/>팔을 쭉 뻗어주세요.
+          <b style={{ color:"#7cc7ff" }}> 1초 유지시</b>  자동 기록됩니다.
         </div>
 
         <div style={gStyles.imgWrap}>

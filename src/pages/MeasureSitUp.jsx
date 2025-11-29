@@ -159,12 +159,13 @@ function GuideCard({ onClose }) {
 
         <div style={gStyles.title}>
           다음 그림처럼 <b style={{ color: "#7cc7ff" }}>카메라 각도 75°</b>로
-          <br /> <b style={{ color: "#7cc7ff" }}>준비자세</b>를 취해주세요.
+          <br /> <b style={{ color: "#7cc7ff" }}>준비자세</b>를 취하시고 대기하시면
+          <br /> 음성이 안내됩니다.
         </div>
 
         <div style={gStyles.imgWrap}>
           <img
-            src="/situp.png"
+            src="/ready.png"
             alt="윗몸 말아올리기 준비자세 예시 (카메라 75°)"
             style={gStyles.img}
             draggable={false}
@@ -184,8 +185,7 @@ function GuideCard({ onClose }) {
           </div>
           <p style={gStyles.jointHint}>
             <b>한쪽(왼쪽 또는 오른쪽)</b>의 위 5개 부위가 <b>화면 안</b>에 <b>또렷하게</b> 보여야
-            정확하게 인식돼요. 몸의 <b>측면 프레이밍(약 75°)</b>을 유지하고,
-            <b>무릎 각도는 약 90°</b>, <b>발바닥은 바닥에 고정</b>되게 촬영해주세요.
+            정확하게 인식돼요.
           </p>
         </div>
       </div>
